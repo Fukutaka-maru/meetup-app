@@ -10,26 +10,40 @@ export type MapMarker = {
   lng: number;
   label: string;
   color: string;
+  /** 位置情報が古い(画面オフ等で更新が止まっている)ときに半透明+経過時間表示にする */
+  sublabel?: string;
 };
 
 type Props = {
   markers: MapMarker[];
 };
 
-function createMarkerElement(label: string, color: string): HTMLDivElement {
-  const el = document.createElement("div");
-  el.className = "flex flex-col items-center";
-  el.innerHTML = `
+function markerHtml(m: MapMarker): string {
+  return `
     <div style="
-      background:${color};color:#fff;font-size:12px;font-weight:600;
-      padding:2px 8px;border-radius:9999px;white-space:nowrap;
+      background:${m.color};color:#fff;font-size:12px;font-weight:600;
+      padding:2px 8px;border-radius:9999px;white-space:nowrap;text-align:center;
       box-shadow:0 1px 4px rgba(0,0,0,.3);margin-bottom:2px;
-    ">${label}</div>
+    ">${m.label}${m.sublabel ? `<span style="display:block;font-size:10px;font-weight:400;opacity:.85">${m.sublabel}</span>` : ""}</div>
     <div style="
-      width:16px;height:16px;border-radius:9999px;background:${color};
+      width:16px;height:16px;border-radius:9999px;background:${m.color};
       border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);
     "></div>
   `;
+}
+
+function applyMarkerElement(el: HTMLElement, m: MapMarker): void {
+  const sig = `${m.label}|${m.color}|${m.sublabel ?? ""}`;
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  el.innerHTML = markerHtml(m);
+  el.style.opacity = m.sublabel ? "0.55" : "1";
+}
+
+function createMarkerElement(m: MapMarker): HTMLDivElement {
+  const el = document.createElement("div");
+  el.className = "flex flex-col items-center";
+  applyMarkerElement(el, m);
   return el;
 }
 
@@ -65,9 +79,10 @@ export default function Map({ markers }: Props) {
       const existing = markerObjsRef.current[m.id];
       if (existing) {
         existing.setLngLat([m.lng, m.lat]);
+        applyMarkerElement(existing.getElement(), m);
       } else {
         markerObjsRef.current[m.id] = new mapboxgl.Marker({
-          element: createMarkerElement(m.label, m.color),
+          element: createMarkerElement(m),
           anchor: "bottom",
         })
           .setLngLat([m.lng, m.lat])

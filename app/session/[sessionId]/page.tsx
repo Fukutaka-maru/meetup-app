@@ -37,6 +37,16 @@ const QUICK_MESSAGES = [
 
 const LOCATION_SEND_INTERVAL_MS = 3000;
 
+/** 最終更新がこれより古い参加者は「位置が古い」表示にする */
+const STALE_MS = 30_000;
+
+/** 経過時間の表示用文字列(30秒〜) */
+function formatAge(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}秒前`;
+  return `${Math.floor(sec / 60)}分前`;
+}
+
 /** 自分以外の参加者に割り当てる色(ブランドのオレンジを先頭に) */
 const SELF_COLOR = "#2563eb";
 const OTHER_COLORS = [
@@ -74,6 +84,8 @@ export default function SessionPage({
   const completedRef = useRef(false);
   const expiredRef = useRef(false);
   const lastSentAtRef = useRef(0);
+  const pendingPosRef = useRef<GeolocationPosition | null>(null);
+  const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMsgKeyRef = useRef<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const geoHelpShownRef = useRef(false);
@@ -135,19 +147,35 @@ export default function SessionPage({
       setGeoError("このブラウザは位置情報に対応していません。");
       return;
     }
+    const send = (pos: GeolocationPosition) => {
+      lastSentAtRef.current = Date.now();
+      updateLocation(
+        sessionId,
+        user.uid,
+        pos.coords.latitude,
+        pos.coords.longitude,
+        Math.round(pos.coords.accuracy)
+      ).catch(() => {});
+    };
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         setGeoError(null);
-        const nowMs = Date.now();
-        if (nowMs - lastSentAtRef.current < LOCATION_SEND_INTERVAL_MS) return;
-        lastSentAtRef.current = nowMs;
-        updateLocation(
-          sessionId,
-          user.uid,
-          pos.coords.latitude,
-          pos.coords.longitude,
-          Math.round(pos.coords.accuracy)
-        ).catch(() => {});
+        const elapsed = Date.now() - lastSentAtRef.current;
+        if (elapsed >= LOCATION_SEND_INTERVAL_MS) {
+          send(pos);
+          return;
+        }
+        // 間引き中は最新位置を保持し、間隔が空き次第送る
+        // (立ち止まった直後などwatchPositionが発火しなくなると最後の位置が届かないため)
+        pendingPosRef.current = pos;
+        if (sendTimerRef.current === null) {
+          sendTimerRef.current = setTimeout(() => {
+            sendTimerRef.current = null;
+            const pending = pendingPosRef.current;
+            pendingPosRef.current = null;
+            if (pending) send(pending);
+          }, LOCATION_SEND_INTERVAL_MS - elapsed);
+        }
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
@@ -168,6 +196,11 @@ export default function SessionPage({
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
+      if (sendTimerRef.current !== null) {
+        clearTimeout(sendTimerRef.current);
+        sendTimerRef.current = null;
+      }
+      pendingPosRef.current = null;
     };
   }, [screen, user, sessionId]);
 
@@ -201,10 +234,10 @@ export default function SessionPage({
     if (el) el.scrollTop = el.scrollHeight;
   }, [chatOpen, session?.messages]);
 
-  // 残り時間表示・期限チェック用の時計
+  // 残り時間・位置の経過時間表示用の時計
   useEffect(() => {
     if (screen !== "active") return;
-    const interval = setInterval(() => setNow(Date.now()), 10000);
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [screen]);
 
@@ -370,13 +403,18 @@ export default function SessionPage({
 
   const markers: MapMarker[] = Object.entries(participants)
     .filter(([, p]) => p.lat !== undefined && p.lng !== undefined)
-    .map(([uid, p]) => ({
-      id: uid,
-      lat: p.lat!,
-      lng: p.lng!,
-      label: uid === user?.uid ? `${p.name}(自分)` : p.name,
-      color: colorOf(uid),
-    }));
+    .map(([uid, p]) => {
+      const age = now - p.lastUpdate;
+      return {
+        id: uid,
+        lat: p.lat!,
+        lng: p.lng!,
+        label: uid === user?.uid ? `${p.name}(自分)` : p.name,
+        color: colorOf(uid),
+        sublabel:
+          uid !== user?.uid && age >= STALE_MS ? formatAge(age) : undefined,
+      };
+    });
 
   const distanceTo = (p: (typeof others)[number][1]) =>
     self?.lat !== undefined && p.lat !== undefined
@@ -540,21 +578,27 @@ export default function SessionPage({
             <ul className="max-h-24 space-y-1 overflow-y-auto">
               {others.map(([uid, p]) => {
                 const d = distanceTo(p);
+                const age = now - p.lastUpdate;
+                const stale = age >= STALE_MS;
                 return (
                   <li key={uid} className="flex items-center justify-center gap-2">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ background: colorOf(uid) }}
+                      style={{ background: colorOf(uid), opacity: stale ? 0.4 : 1 }}
                     />
                     {d === null ? (
                       <span className="text-slate-500">
                         {p.name}さんの位置を取得中...
                       </span>
                     ) : (
-                      <span className="font-bold text-slate-800">
+                      <span
+                        className={`font-bold ${stale ? "text-slate-400" : "text-slate-800"}`}
+                      >
                         {p.name}さんまで {formatDistance(d)}
                         <span className="ml-2 font-normal text-slate-500">
-                          徒歩約{walkingMinutes(d)}分
+                          {stale
+                            ? `${formatAge(age)}の位置`
+                            : `徒歩約${walkingMinutes(d)}分`}
                         </span>
                       </span>
                     )}
