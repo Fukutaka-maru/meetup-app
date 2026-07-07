@@ -7,7 +7,7 @@ import {
   push,
 } from "firebase/database";
 import { customAlphabet } from "nanoid";
-import { db } from "./firebase";
+import { getDb } from "./firebase";
 
 /** セッション有効期限: 1時間 */
 export const SESSION_TTL_MS = 60 * 60 * 1000;
@@ -42,7 +42,7 @@ export type SessionData = {
 };
 
 export function sessionRef(sessionId: string) {
-  return ref(db, `sessions/${sessionId}`);
+  return ref(getDb(), `sessions/${sessionId}`);
 }
 
 /** セッションを作成し、自分を最初の参加者として登録する */
@@ -80,7 +80,7 @@ export async function joinSession(
   if (!participants[uid] && Object.keys(participants).length >= MAX_PARTICIPANTS) {
     throw new Error("session-full");
   }
-  await set(ref(db, `sessions/${sessionId}/participants/${uid}`), {
+  await set(ref(getDb(), `sessions/${sessionId}/participants/${uid}`), {
     name,
     lastUpdate: Date.now(),
   } satisfies Participant);
@@ -94,7 +94,7 @@ export async function updateLocation(
   lng: number,
   accuracy: number
 ): Promise<void> {
-  await update(ref(db, `sessions/${sessionId}/participants/${uid}`), {
+  await update(ref(getDb(), `sessions/${sessionId}/participants/${uid}`), {
     lat,
     lng,
     accuracy,
@@ -108,7 +108,7 @@ export async function sendMessage(
   uid: string,
   text: string
 ): Promise<void> {
-  await push(ref(db, `sessions/${sessionId}/messages`), {
+  await push(ref(getDb(), `sessions/${sessionId}/messages`), {
     from: uid,
     text,
     at: Date.now(),

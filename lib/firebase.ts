@@ -15,13 +15,21 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const db = getDatabase(app);
-export const auth = getAuth(app);
+function getFirebaseApp() {
+  return getApps().length ? getApp() : initializeApp(firebaseConfig);
+}
 
-/** 匿名ログイン済みのユーザーを返す(未ログインなら匿名サインイン) */
+export function getDb() {
+  return getDatabase(getFirebaseApp());
+}
+
+export function getFirebaseAuth() {
+  return getAuth(getFirebaseApp());
+}
+
 export function ensureSignedIn(): Promise<User> {
   return new Promise((resolve, reject) => {
+    const auth = getFirebaseAuth();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         unsubscribe();
