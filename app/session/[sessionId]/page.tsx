@@ -53,12 +53,19 @@ export default function SessionPage({
   const [toast, setToast] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [unread, setUnread] = useState(0);
+  const [showGeoHelp, setShowGeoHelp] = useState(false);
 
   const completedRef = useRef(false);
   const expiredRef = useRef(false);
   const lastSentAtRef = useRef(0);
   const lastMsgKeyRef = useRef<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const geoHelpShownRef = useRef(false);
+  const chatOpenRef = useRef(false);
+  const chatListRef = useRef<HTMLDivElement | null>(null);
 
   // 匿名ログイン
   useEffect(() => {
@@ -131,9 +138,12 @@ export default function SessionPage({
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
-          setGeoError(
-            "位置情報が許可されていません。ブラウザの設定から許可してください。"
-          );
+          setGeoError("位置情報が許可されていません。");
+          // 初回だけ設定方法のガイドを自動で開く
+          if (!geoHelpShownRef.current) {
+            geoHelpShownRef.current = true;
+            setShowGeoHelp(true);
+          }
         } else {
           setGeoError("位置情報を取得できません。電波状況を確認してください。");
         }
@@ -148,7 +158,7 @@ export default function SessionPage({
     };
   }, [screen, user, sessionId]);
 
-  // 相手からの定型文メッセージをトースト表示
+  // 相手からの新着メッセージ: チャットを閉じていればトースト+未読カウント
   useEffect(() => {
     if (!session?.messages || !user) return;
     const entries = Object.entries(session.messages);
@@ -157,12 +167,26 @@ export default function SessionPage({
     if (key === lastMsgKeyRef.current) return;
     lastMsgKeyRef.current = key;
     if (msg.from === user.uid) return;
+    if (chatOpenRef.current) return;
+    setUnread((n) => n + 1);
     const senderName =
       session.participants?.[msg.from]?.name ?? "相手";
     setToast(`${senderName}: ${msg.text}`);
     const timer = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(timer);
   }, [session, user]);
+
+  // チャット開閉の反映と、開いたときの未読リセット・最下部スクロール
+  useEffect(() => {
+    chatOpenRef.current = chatOpen;
+    if (chatOpen) setUnread(0);
+  }, [chatOpen]);
+
+  useEffect(() => {
+    if (!chatOpen) return;
+    const el = chatListRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chatOpen, session?.messages]);
 
   // 残り時間表示・期限チェック用の時計
   useEffect(() => {
@@ -345,12 +369,16 @@ export default function SessionPage({
     ? Math.max(0, Math.ceil((session.expiresAt - now) / 60000))
     : 0;
 
-  const handleSendQuick = (text: string) => {
-    if (!user) return;
-    sendMessage(sessionId, user.uid, text).catch(() => {});
-    setToast(`送信: ${text}`);
-    setTimeout(() => setToast(null), 2000);
+  const handleSendChat = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !user) return;
+    sendMessage(sessionId, user.uid, trimmed).catch(() => {});
+    setChatInput("");
   };
+
+  const chatMessages = Object.entries(session?.messages ?? {}).sort(
+    ([, a], [, b]) => a.at - b.at
+  );
 
   return (
     <main className="flex h-full flex-col">
@@ -379,8 +407,97 @@ export default function SessionPage({
           </div>
         )}
         {geoError && (
-          <div className="absolute inset-x-4 top-4 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
-            {geoError}
+          <div className="absolute inset-x-4 top-4 flex items-center justify-between gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-lg">
+            <span>{geoError}</span>
+            <button
+              onClick={() => setShowGeoHelp(true)}
+              className="shrink-0 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold underline-offset-2 active:bg-white/30"
+            >
+              設定方法
+            </button>
+          </div>
+        )}
+
+        {/* チャットパネル(地図の下部に重ねる。閉じれば地図全面) */}
+        {chatOpen && (
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[45%] flex-col rounded-t-2xl border-t border-slate-200 bg-white/95 backdrop-blur">
+            <div className="flex items-center justify-between px-4 pb-1 pt-2">
+              <span className="text-xs font-medium text-slate-400">
+                チャット(合流後・1時間後に消えます)
+              </span>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="rounded-full px-2 py-1 text-xs font-semibold text-slate-400 active:bg-slate-100"
+                aria-label="チャットを閉じる"
+              >
+                閉じる ▾
+              </button>
+            </div>
+            <div
+              ref={chatListRef}
+              className="min-h-20 flex-1 space-y-1.5 overflow-y-auto px-4 py-1"
+            >
+              {chatMessages.length === 0 && (
+                <p className="py-3 text-center text-xs text-slate-300">
+                  まだメッセージはありません
+                </p>
+              )}
+              {chatMessages.map(([key, msg]) => {
+                const mine = msg.from === user?.uid;
+                return (
+                  <div
+                    key={key}
+                    className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                  >
+                    <span
+                      className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${
+                        mine
+                          ? "rounded-br-md bg-slate-900 text-white"
+                          : "rounded-bl-md bg-slate-100 text-slate-800"
+                      }`}
+                    >
+                      {msg.text}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="space-y-2 px-4 pb-3 pt-2">
+              <div className="flex gap-2 overflow-x-auto">
+                {QUICK_MESSAGES.map((text) => (
+                  <button
+                    key={text}
+                    onClick={() => handleSendChat(text)}
+                    className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 active:bg-slate-100"
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChat(chatInput);
+                }}
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="メッセージを入力"
+                  maxLength={200}
+                  className="min-w-0 flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm outline-none transition focus:border-slate-900"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim()}
+                  className="shrink-0 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white active:bg-slate-800 disabled:opacity-40"
+                >
+                  送信
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </div>
@@ -406,27 +523,87 @@ export default function SessionPage({
           )}
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {QUICK_MESSAGES.map((text) => (
-            <button
-              key={text}
-              onClick={() => handleSendQuick(text)}
-              disabled={!other}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 active:bg-slate-100 disabled:opacity-40"
-            >
-              {text}
-            </button>
-          ))}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setChatOpen((v) => !v)}
+            className="relative flex-1 rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition active:bg-slate-50"
+          >
+            チャット
+            {unread > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                {unread}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={handleComplete}
+            className="flex-[2] rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-emerald-700"
+          >
+            合流できた!(共有を終了)
+          </button>
+        </div>
+      </footer>
+
+      {showGeoHelp && <GeoHelpModal onClose={() => setShowGeoHelp(false)} />}
+    </main>
+  );
+}
+
+function GeoHelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85%] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-6 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 text-lg font-semibold tracking-tight">
+          位置情報をオンにするには
+        </h2>
+        <p className="mb-5 text-xs leading-relaxed text-slate-400">
+          このアプリは位置情報が許可されていないと相手に自分の場所を伝えられません。お使いの端末に合わせて設定してください。
+        </p>
+
+        <div className="space-y-5 text-sm leading-relaxed text-slate-600">
+          <div>
+            <h3 className="mb-1.5 font-semibold text-slate-900">
+              iPhone(Safari)
+            </h3>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>「設定」アプリ → 「プライバシーとセキュリティ」→「位置情報サービス」をオン</li>
+              <li>同じ画面の一覧から「Safari」→「このAppの使用中」を選択</li>
+              <li>このページに戻って再読み込み。確認が出たら「許可」を押す</li>
+            </ol>
+          </div>
+          <div>
+            <h3 className="mb-1.5 font-semibold text-slate-900">
+              Android(Chrome)
+            </h3>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>アドレスバー左の鍵アイコン(または「︙」→「設定」)をタップ</li>
+              <li>「権限」→「位置情報」→「許可」を選択</li>
+              <li>端末の設定で位置情報(GPS)自体がオンかも確認</li>
+            </ol>
+          </div>
+          <div>
+            <h3 className="mb-1.5 font-semibold text-slate-900">パソコン</h3>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>アドレスバーの鍵アイコンをクリック</li>
+              <li>「位置情報」を「許可」にしてページを再読み込み</li>
+            </ol>
+          </div>
         </div>
 
         <button
-          onClick={handleComplete}
-          className="w-full rounded-full bg-emerald-600 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] active:bg-emerald-700"
+          onClick={onClose}
+          className="mt-6 w-full rounded-full bg-slate-900 py-3 text-sm font-semibold text-white active:bg-slate-800"
         >
-          合流できた!(共有を終了)
+          閉じる
         </button>
-      </footer>
-    </main>
+      </div>
+    </div>
   );
 }
 
