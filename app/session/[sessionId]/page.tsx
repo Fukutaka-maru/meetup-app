@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import { onValue } from "firebase/database";
 import type { User } from "firebase/auth";
 import Map, { type MapMarker } from "@/components/Map";
+import Logo from "@/components/Logo";
 import { ensureSignedIn } from "@/lib/firebase";
 import {
   completeSession,
@@ -199,7 +200,7 @@ export default function SessionPage({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "待ち合わせ位置共有",
+          title: "Dotdot Meet - 待ち合わせ位置共有",
           text: "このURLを開くと待ち合わせ中の位置を共有できます(1時間で消えます)",
           url,
         });
@@ -280,18 +281,18 @@ export default function SessionPage({
 
   if (screen === "join") {
     return (
-      <main className="flex min-h-full flex-col items-center justify-center px-6">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-sm">
-          <div className="mb-4 text-center">
-            <div className="mb-2 text-4xl">📍</div>
-            <h1 className="text-xl font-bold">待ち合わせに参加</h1>
+      <main className="flex min-h-full flex-col items-center justify-center bg-white px-6">
+        <div className="w-full max-w-xs">
+          <div className="mb-8 text-center">
+            <Logo className="mx-auto mb-4 h-14 w-auto" />
+            <h1 className="text-xl font-semibold tracking-tight">待ち合わせに参加</h1>
             <p className="mt-1 text-sm text-slate-500">
               参加すると、あなたの位置が相手に共有されます。
               <br />
               合流後・1時間後に自動で削除されます。
             </p>
           </div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-600">
+          <label className="mb-2 block text-xs font-medium text-slate-500">
             表示名(相手に見える名前)
           </label>
           <input
@@ -300,12 +301,12 @@ export default function SessionPage({
             onChange={(e) => setName(e.target.value)}
             placeholder="例: ゆき"
             maxLength={20}
-            className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-base outline-none focus:border-blue-500"
+            className="mb-3 w-full rounded-xl border border-slate-200 px-4 py-3 text-base outline-none transition focus:border-slate-900"
           />
           <button
             onClick={handleJoin}
             disabled={joining}
-            className="w-full rounded-xl bg-blue-600 py-3.5 text-base font-bold text-white transition active:bg-blue-700 disabled:opacity-50"
+            className="w-full rounded-full bg-slate-900 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] active:bg-slate-800 disabled:opacity-40"
           >
             {joining ? "参加中..." : "位置を共有して参加"}
           </button>
@@ -354,13 +355,16 @@ export default function SessionPage({
   return (
     <main className="flex h-full flex-col">
       {/* ヘッダー */}
-      <header className="flex items-center justify-between bg-white px-4 py-2.5 shadow-sm">
-        <div className="text-sm font-medium text-slate-600">
-          ⏱ あと{remainingMin}分
+      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <Logo className="h-7 w-auto" />
+          <span className="text-xs font-medium tabular-nums text-slate-400">
+            あと{remainingMin}分
+          </span>
         </div>
         <button
           onClick={handleShare}
-          className="rounded-full bg-blue-50 px-4 py-1.5 text-sm font-bold text-blue-600 active:bg-blue-100"
+          className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white active:bg-slate-800"
         >
           {copied ? "コピーしました!" : "URLを相手に送る"}
         </button>
@@ -382,7 +386,7 @@ export default function SessionPage({
       </div>
 
       {/* フッター */}
-      <footer className="space-y-3 bg-white px-4 pb-6 pt-3 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+      <footer className="space-y-3 border-t border-slate-100 bg-white px-4 pb-6 pt-3">
         <div className="text-center text-sm">
           {!other ? (
             <span className="text-slate-500">
@@ -417,9 +421,9 @@ export default function SessionPage({
 
         <button
           onClick={handleComplete}
-          className="w-full rounded-xl bg-emerald-600 py-3.5 text-base font-bold text-white transition active:bg-emerald-700"
+          className="w-full rounded-full bg-emerald-600 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] active:bg-emerald-700"
         >
-          🤝 合流できた!(共有を終了)
+          合流できた!(共有を終了)
         </button>
       </footer>
     </main>
@@ -438,16 +442,16 @@ function CenterMessage({
   showHomeLink?: boolean;
 }) {
   return (
-    <main className="flex min-h-full flex-col items-center justify-center px-6 text-center">
-      <div className="mb-3 text-5xl">{emoji}</div>
-      <h1 className="mb-2 text-xl font-bold">{title}</h1>
+    <main className="flex min-h-full flex-col items-center justify-center bg-white px-6 text-center">
+      <div className="mb-4 text-4xl">{emoji}</div>
+      <h1 className="mb-2 text-xl font-semibold tracking-tight">{title}</h1>
       {body && (
-        <p className="mb-6 text-sm leading-relaxed text-slate-500">{body}</p>
+        <p className="mb-8 text-sm leading-relaxed text-slate-400">{body}</p>
       )}
       {showHomeLink && (
         <a
           href="/"
-          className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white active:bg-blue-700"
+          className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-slate-800"
         >
           新しい待ち合わせを作る
         </a>
