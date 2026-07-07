@@ -11,8 +11,8 @@ import { getDb } from "./firebase";
 
 /** セッション有効期限: 1時間 */
 export const SESSION_TTL_MS = 60 * 60 * 1000;
-/** MVPは2人まで */
-export const MAX_PARTICIPANTS = 2;
+/** 1セッションの最大参加人数 */
+export const MAX_PARTICIPANTS = 8;
 
 const generateId = customAlphabet(
   "abcdefghijkmnpqrstuvwxyz23456789", // 紛らわしい文字(l/1/o/0)を除外

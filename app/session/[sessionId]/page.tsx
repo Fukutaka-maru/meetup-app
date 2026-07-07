@@ -13,6 +13,7 @@ import {
   sendMessage,
   sessionRef,
   updateLocation,
+  MAX_PARTICIPANTS,
   type SessionData,
 } from "@/lib/session";
 import { distanceMeters, formatDistance, walkingMinutes } from "@/lib/distance";
@@ -35,6 +36,18 @@ const QUICK_MESSAGES = [
 ];
 
 const LOCATION_SEND_INTERVAL_MS = 3000;
+
+/** 自分以外の参加者に割り当てる色(ブランドのオレンジを先頭に) */
+const SELF_COLOR = "#2563eb";
+const OTHER_COLORS = [
+  "#f97316",
+  "#16a34a",
+  "#9333ea",
+  "#db2777",
+  "#0891b2",
+  "#ca8a04",
+  "#e11d48",
+];
 
 export default function SessionPage({
   params,
@@ -106,7 +119,7 @@ export default function SessionPage({
           const isParticipant = !!data.participants?.[user.uid];
           if (isParticipant) return "active";
           const count = Object.keys(data.participants ?? {}).length;
-          if (count >= 2) return "full";
+          if (count >= MAX_PARTICIPANTS) return "full";
           return prev === "loading" || prev === "join" ? "join" : prev;
         });
       },
@@ -288,7 +301,7 @@ export default function SessionPage({
       <CenterMessage
         emoji="🚫"
         title="この待ち合わせは満員です"
-        body="すでに2人が参加しています。"
+        body={`すでに${MAX_PARTICIPANTS}人が参加しています。`}
         showHomeLink
       />
     );
@@ -344,10 +357,16 @@ export default function SessionPage({
 
   const participants = session?.participants ?? {};
   const self = user ? participants[user.uid] : undefined;
-  const otherEntry = Object.entries(participants).find(
-    ([uid]) => uid !== user?.uid
-  );
-  const other = otherEntry?.[1];
+  // uid順で固定して、参加者ごとの色が全員の画面で一致するようにする
+  const others = Object.entries(participants)
+    .filter(([uid]) => uid !== user?.uid)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const colorOf = (uid: string) => {
+    if (uid === user?.uid) return SELF_COLOR;
+    const idx = others.findIndex(([id]) => id === uid);
+    if (idx < 0) return "#94a3b8"; // 退出済みなど、一覧にいない参加者
+    return OTHER_COLORS[idx % OTHER_COLORS.length];
+  };
 
   const markers: MapMarker[] = Object.entries(participants)
     .filter(([, p]) => p.lat !== undefined && p.lng !== undefined)
@@ -356,14 +375,13 @@ export default function SessionPage({
       lat: p.lat!,
       lng: p.lng!,
       label: uid === user?.uid ? `${p.name}(自分)` : p.name,
-      isSelf: uid === user?.uid,
+      color: colorOf(uid),
     }));
 
-  const bothLocated =
-    self?.lat !== undefined && other?.lat !== undefined;
-  const distance = bothLocated
-    ? distanceMeters(self!.lat!, self!.lng!, other!.lat!, other!.lng!)
-    : null;
+  const distanceTo = (p: (typeof others)[number][1]) =>
+    self?.lat !== undefined && p.lat !== undefined
+      ? distanceMeters(self.lat!, self.lng!, p.lat!, p.lng!)
+      : null;
 
   const remainingMin = session
     ? Math.max(0, Math.ceil((session.expiresAt - now) / 60000))
@@ -444,11 +462,20 @@ export default function SessionPage({
               )}
               {chatMessages.map(([key, msg]) => {
                 const mine = msg.from === user?.uid;
+                const senderName = participants[msg.from]?.name ?? "退出した参加者";
                 return (
                   <div
                     key={key}
-                    className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                    className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
                   >
+                    {!mine && (
+                      <span
+                        className="mb-0.5 ml-1 text-[10px] font-medium"
+                        style={{ color: colorOf(msg.from) }}
+                      >
+                        {senderName}
+                      </span>
+                    )}
                     <span
                       className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${
                         mine
@@ -504,22 +531,37 @@ export default function SessionPage({
 
       {/* フッター */}
       <footer className="space-y-3 border-t border-slate-100 bg-white px-4 pb-6 pt-3">
-        <div className="text-center text-sm">
-          {!other ? (
-            <span className="text-slate-500">
+        <div className="text-sm">
+          {others.length === 0 ? (
+            <p className="text-center text-slate-500">
               相手の参加を待っています... 上のボタンからURLを送ってください
-            </span>
-          ) : distance === null ? (
-            <span className="text-slate-500">
-              {other.name}さんの位置を取得中...
-            </span>
+            </p>
           ) : (
-            <span className="font-bold text-slate-800">
-              {other.name}さんまで {formatDistance(distance)}
-              <span className="ml-2 font-normal text-slate-500">
-                徒歩約{walkingMinutes(distance)}分
-              </span>
-            </span>
+            <ul className="max-h-24 space-y-1 overflow-y-auto">
+              {others.map(([uid, p]) => {
+                const d = distanceTo(p);
+                return (
+                  <li key={uid} className="flex items-center justify-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ background: colorOf(uid) }}
+                    />
+                    {d === null ? (
+                      <span className="text-slate-500">
+                        {p.name}さんの位置を取得中...
+                      </span>
+                    ) : (
+                      <span className="font-bold text-slate-800">
+                        {p.name}さんまで {formatDistance(d)}
+                        <span className="ml-2 font-normal text-slate-500">
+                          徒歩約{walkingMinutes(d)}分
+                        </span>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 

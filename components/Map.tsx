@@ -9,17 +9,16 @@ export type MapMarker = {
   lat: number;
   lng: number;
   label: string;
-  isSelf: boolean;
+  color: string;
 };
 
 type Props = {
   markers: MapMarker[];
 };
 
-function createMarkerElement(label: string, isSelf: boolean): HTMLDivElement {
+function createMarkerElement(label: string, color: string): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "flex flex-col items-center";
-  const color = isSelf ? "#2563eb" : "#f97316";
   el.innerHTML = `
     <div style="
       background:${color};color:#fff;font-size:12px;font-weight:600;
@@ -68,7 +67,7 @@ export default function Map({ markers }: Props) {
         existing.setLngLat([m.lng, m.lat]);
       } else {
         markerObjsRef.current[m.id] = new mapboxgl.Marker({
-          element: createMarkerElement(m.label, m.isSelf),
+          element: createMarkerElement(m.label, m.color),
           anchor: "bottom",
         })
           .setLngLat([m.lng, m.lat])
