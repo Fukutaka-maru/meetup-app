@@ -10,13 +10,20 @@ import {
   completeSession,
   deleteSession,
   joinSession,
+  savePushSubscription,
   sendMessage,
   sessionRef,
   updateLocation,
   MAX_PARTICIPANTS,
   type SessionData,
 } from "@/lib/session";
-import { distanceMeters, formatDistance, walkingMinutes } from "@/lib/distance";
+import {
+  distanceMeters,
+  formatDistance,
+  transitMinutes,
+  TRANSIT_MIN_DISTANCE_M,
+  walkingMinutes,
+} from "@/lib/distance";
 
 type Screen =
   | "loading"
@@ -40,12 +47,41 @@ const LOCATION_SEND_INTERVAL_MS = 3000;
 /** 最終更新がこれより古い参加者は「位置が古い」表示にする */
 const STALE_MS = 30_000;
 
+/** 同じ相手への停滞通知を再送するまでの間隔 */
+const STALE_NOTIFY_COOLDOWN_MS = 5 * 60_000;
+
 /** 経過時間の表示用文字列(30秒〜) */
 function formatAge(ms: number): string {
   const sec = Math.floor(ms / 1000);
   if (sec < 60) return `${sec}秒前`;
   return `${Math.floor(sec / 60)}分前`;
 }
+
+/** VAPID公開鍵をPush購読用のUint8Arrayに変換する */
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const base64Safe = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64Safe);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))) as Uint8Array<ArrayBuffer>;
+}
+
+function isIOS(): boolean {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isStandalone(): boolean {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true
+  );
+}
+
+type PushStatus =
+  | "unsupported"
+  | "ios-needs-install"
+  | "default"
+  | "granted"
+  | "denied";
 
 /** 自分以外の参加者に割り当てる色(ブランドのオレンジを先頭に) */
 const SELF_COLOR = "#2563eb";
@@ -80,6 +116,9 @@ export default function SessionPage({
   const [chatInput, setChatInput] = useState("");
   const [unread, setUnread] = useState(0);
   const [showGeoHelp, setShowGeoHelp] = useState(false);
+  const [pushStatus, setPushStatus] = useState<PushStatus>("unsupported");
+  const [showPushBanner, setShowPushBanner] = useState(false);
+  const [pushEnabling, setPushEnabling] = useState(false);
 
   const completedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -203,6 +242,69 @@ export default function SessionPage({
       pendingPosRef.current = null;
     };
   }, [screen, user, sessionId]);
+
+  // Push通知の対応状況を判定し、まだ許可を得ていなければバナーを出す
+  useEffect(() => {
+    if (screen !== "active") return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushStatus("unsupported");
+      return;
+    }
+    if (isIOS() && !isStandalone()) {
+      setPushStatus("ios-needs-install");
+      setShowPushBanner(true);
+      return;
+    }
+    const perm = Notification.permission;
+    setPushStatus(perm === "granted" ? "granted" : perm === "denied" ? "denied" : "default");
+    if (perm === "default") setShowPushBanner(true);
+  }, [screen]);
+
+  const handleEnablePush = async () => {
+    if (!user || pushEnabling) return;
+    setPushEnabling(true);
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushStatus("denied");
+        setShowPushBanner(false);
+        return;
+      }
+      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!publicKey) throw new Error("vapid-key-missing");
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      await savePushSubscription(sessionId, user.uid, subscription.toJSON());
+      setPushStatus("granted");
+      setShowPushBanner(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPushEnabling(false);
+    }
+  };
+
+  // 相手の位置が停滞したことを検知したら、サーバー経由で本人に通知を送る(自分の画面は動いているので確実)
+  const staleNotifiedRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (screen !== "active" || !session?.participants || !user) return;
+    for (const [uid, p] of Object.entries(session.participants)) {
+      if (uid === user.uid || !p.lastUpdate) continue;
+      const age = now - p.lastUpdate;
+      if (age < STALE_MS) continue;
+      const lastNotified = staleNotifiedRef.current[uid] ?? 0;
+      if (Date.now() - lastNotified < STALE_NOTIFY_COOLDOWN_MS) continue;
+      staleNotifiedRef.current[uid] = Date.now();
+      fetch("/api/notify-stale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, uid }),
+      }).catch(() => {});
+    }
+  }, [screen, session, user, now, sessionId]);
 
   // 相手からの新着メッセージ: チャットを閉じていればトースト+未読カウント
   useEffect(() => {
@@ -473,6 +575,47 @@ export default function SessionPage({
             </button>
           </div>
         )}
+        {showPushBanner && !geoError && (
+          <div className="absolute inset-x-4 top-4 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+            {pushStatus === "ios-needs-install" ? (
+              <>
+                <p className="font-medium">
+                  画面を閉じても位置更新を促す通知を受け取るには
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-white/80">
+                  Safariの共有ボタン →「ホーム画面に追加」でこのアプリを追加し、そこから開き直してください(iOS 16.4以降)。
+                </p>
+                <button
+                  onClick={() => setShowPushBanner(false)}
+                  className="mt-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold active:bg-white/30"
+                >
+                  閉じる
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  位置更新が止まったら通知でお知らせします。有効にしますか?
+                </span>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => setShowPushBanner(false)}
+                    className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold active:bg-white/30"
+                  >
+                    あとで
+                  </button>
+                  <button
+                    onClick={handleEnablePush}
+                    disabled={pushEnabling}
+                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-900 active:bg-white/80 disabled:opacity-50"
+                  >
+                    {pushEnabling ? "設定中..." : "許可する"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* チャットパネル(地図の下部に重ねる。閉じれば地図全面) */}
         {chatOpen && (
@@ -598,7 +741,9 @@ export default function SessionPage({
                         <span className="ml-2 font-normal text-slate-500">
                           {stale
                             ? `${formatAge(age)}の位置`
-                            : `徒歩約${walkingMinutes(d)}分`}
+                            : d >= TRANSIT_MIN_DISTANCE_M
+                              ? `徒歩約${walkingMinutes(d)}分 ・ 電車/バス目安${transitMinutes(d)}分`
+                              : `徒歩約${walkingMinutes(d)}分`}
                         </span>
                       </span>
                     )}

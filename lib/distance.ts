@@ -25,3 +25,16 @@ export function formatDistance(meters: number): string {
 export function walkingMinutes(meters: number): number {
   return Math.max(1, Math.ceil(meters / 80));
 }
+
+/** 電車・バス移動が現実的になる距離のしきい値(これ未満は徒歩の方が早いため非表示) */
+export const TRANSIT_MIN_DISTANCE_M = 1500;
+
+/**
+ * 電車・バスの概算所要時間(距離ベースの目安、実際の乗換経路は考慮しない)。
+ * 表定速度30km/h相当の移動時間に、駅までの徒歩・待ち時間・乗換の目安12分を加算。
+ */
+export function transitMinutes(meters: number): number {
+  const overheadMin = 12;
+  const effectiveSpeedKmPerMin = 0.5;
+  return overheadMin + Math.ceil(meters / 1000 / effectiveSpeedKmPerMin);
+}

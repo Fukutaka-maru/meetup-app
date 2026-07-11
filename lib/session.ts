@@ -25,6 +25,7 @@ export type Participant = {
   lng?: number;
   accuracy?: number;
   lastUpdate: number;
+  pushSubscription?: PushSubscriptionJSON;
 };
 
 export type Message = {
@@ -99,6 +100,17 @@ export async function updateLocation(
     lng,
     accuracy,
     lastUpdate: Date.now(),
+  });
+}
+
+/** プッシュ通知の購読情報を保存する */
+export async function savePushSubscription(
+  sessionId: string,
+  uid: string,
+  subscription: PushSubscriptionJSON
+): Promise<void> {
+  await update(ref(getDb(), `sessions/${sessionId}/participants/${uid}`), {
+    pushSubscription: subscription,
   });
 }
 
