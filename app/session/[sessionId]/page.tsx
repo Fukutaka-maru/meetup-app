@@ -76,12 +76,7 @@ function isStandalone(): boolean {
   );
 }
 
-type PushStatus =
-  | "unsupported"
-  | "ios-needs-install"
-  | "default"
-  | "granted"
-  | "denied";
+type PushStatus = "unsupported" | "default" | "granted" | "denied";
 
 /** 自分以外の参加者に割り当てる色(ブランドのオレンジを先頭に) */
 const SELF_COLOR = "#2563eb";
@@ -244,6 +239,7 @@ export default function SessionPage({
   }, [screen, user, sessionId]);
 
   // Push通知の対応状況を判定し、まだ許可を得ていなければバナーを出す
+  // (iOSのSafariタブでは仕組み上Pushが届かないため、ホーム画面追加を強いらず静かに機能を見送る)
   useEffect(() => {
     if (screen !== "active") return;
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -251,8 +247,7 @@ export default function SessionPage({
       return;
     }
     if (isIOS() && !isStandalone()) {
-      setPushStatus("ios-needs-install");
-      setShowPushBanner(true);
+      setPushStatus("unsupported");
       return;
     }
     const perm = Notification.permission;
@@ -483,6 +478,11 @@ export default function SessionPage({
             {joining ? "参加中..." : "位置を共有して参加"}
           </button>
           {joinError && <p className="mt-3 text-sm text-red-600">{joinError}</p>}
+          <p className="mt-6 text-center text-[11px] leading-relaxed text-slate-300">
+            位置情報はこのページを開いている間だけ更新されます。
+            <br />
+            画面を閉じたりロックしたりすると更新が止まります。
+          </p>
         </div>
       </main>
     );
@@ -576,44 +576,23 @@ export default function SessionPage({
           </div>
         )}
         {showPushBanner && !geoError && (
-          <div className="absolute inset-x-4 top-4 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
-            {pushStatus === "ios-needs-install" ? (
-              <>
-                <p className="font-medium">
-                  画面を閉じても位置更新を促す通知を受け取るには
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-white/80">
-                  Safariの共有ボタン →「ホーム画面に追加」でこのアプリを追加し、そこから開き直してください(iOS 16.4以降)。
-                </p>
-                <button
-                  onClick={() => setShowPushBanner(false)}
-                  className="mt-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold active:bg-white/30"
-                >
-                  閉じる
-                </button>
-              </>
-            ) : (
-              <div className="flex items-center justify-between gap-3">
-                <span>
-                  位置更新が止まったら通知でお知らせします。有効にしますか?
-                </span>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    onClick={() => setShowPushBanner(false)}
-                    className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold active:bg-white/30"
-                  >
-                    あとで
-                  </button>
-                  <button
-                    onClick={handleEnablePush}
-                    disabled={pushEnabling}
-                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-900 active:bg-white/80 disabled:opacity-50"
-                  >
-                    {pushEnabling ? "設定中..." : "許可する"}
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="absolute inset-x-4 top-4 flex items-center justify-between gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+            <span>位置更新が止まったら通知でお知らせします。有効にしますか?</span>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => setShowPushBanner(false)}
+                className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold active:bg-white/30"
+              >
+                あとで
+              </button>
+              <button
+                onClick={handleEnablePush}
+                disabled={pushEnabling}
+                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-900 active:bg-white/80 disabled:opacity-50"
+              >
+                {pushEnabling ? "設定中..." : "許可する"}
+              </button>
+            </div>
           </div>
         )}
 
