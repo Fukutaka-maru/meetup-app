@@ -395,6 +395,30 @@ export default function SessionPage({
     completeSession(sessionId).catch(() => {});
   };
 
+  const handleMapClick = useCallback(
+    async (lat: number, lng: number) => {
+      setIsPinMode(false);
+      setSettingPin(true);
+      try {
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+        let name = "目的地";
+        if (token) {
+          const res = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&language=ja&limit=1`
+          );
+          const data = (await res.json()) as { features?: { place_name: string }[] };
+          if (data.features?.[0]?.place_name) name = data.features[0].place_name;
+        }
+        await setDestination(sessionId, { lat, lng, name });
+      } catch {
+        // ignore
+      } finally {
+        setSettingPin(false);
+      }
+    },
+    [sessionId]
+  );
+
   // ---- 画面ごとの描画 ----
 
   if (screen === "loading") {
@@ -537,30 +561,6 @@ export default function SessionPage({
   const remainingMin = session
     ? Math.max(0, Math.ceil((session.expiresAt - now) / 60000))
     : 0;
-
-  const handleMapClick = useCallback(
-    async (lat: number, lng: number) => {
-      setIsPinMode(false);
-      setSettingPin(true);
-      try {
-        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-        let name = "目的地";
-        if (token) {
-          const res = await fetch(
-            `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&language=ja&limit=1`
-          );
-          const data = (await res.json()) as { features?: { place_name: string }[] };
-          if (data.features?.[0]?.place_name) name = data.features[0].place_name;
-        }
-        await setDestination(sessionId, { lat, lng, name });
-      } catch {
-        // ignore
-      } finally {
-        setSettingPin(false);
-      }
-    },
-    [sessionId]
-  );
 
   const handleSendChat = (text: string) => {
     const trimmed = text.trim();
