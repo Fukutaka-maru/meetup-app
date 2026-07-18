@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ensureSignedIn } from "@/lib/firebase";
-import { createSession, type Destination } from "@/lib/session";
+import { createSession } from "@/lib/session";
 import Logo from "@/components/Logo";
 
 const STEPS = [
@@ -13,65 +13,16 @@ const STEPS = [
   "会えたら「合流できた!」→ データは消えます",
 ];
 
-type GeocodingFeature = {
-  id: string;
-  place_name: string;
-  geometry: { coordinates: [number, number] };
-};
-
 export default function HomePage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [destQuery, setDestQuery] = useState("");
-  const [destSuggestions, setDestSuggestions] = useState<GeocodingFeature[]>([]);
-  const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
-  const [destSearching, setDestSearching] = useState(false);
-  const destDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
     const saved = localStorage.getItem("displayName");
     if (saved) setName(saved);
   }, []);
-
-  // 目的地の検索(Mapbox Geocoding)
-  useEffect(() => {
-    if (destDebounceRef.current) clearTimeout(destDebounceRef.current);
-    if (!destQuery.trim() || selectedDestination) {
-      setDestSuggestions([]);
-      return;
-    }
-    destDebounceRef.current = setTimeout(async () => {
-      const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-      if (!token) return;
-      setDestSearching(true);
-      try {
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destQuery)}.json?access_token=${token}&language=ja&limit=5&proximity=ip`;
-        const res = await fetch(url);
-        const data = (await res.json()) as { features: GeocodingFeature[] };
-        setDestSuggestions(data.features ?? []);
-      } catch {
-        // ネットワークエラーは無視
-      } finally {
-        setDestSearching(false);
-      }
-    }, 300);
-  }, [destQuery, selectedDestination]);
-
-  const handleSelectDestination = (feature: GeocodingFeature) => {
-    const [lng, lat] = feature.geometry.coordinates;
-    setSelectedDestination({ lat, lng, name: feature.place_name });
-    setDestQuery(feature.place_name);
-    setDestSuggestions([]);
-  };
-
-  const handleClearDestination = () => {
-    setSelectedDestination(null);
-    setDestQuery("");
-    setDestSuggestions([]);
-  };
 
   const handleCreate = async () => {
     setCreating(true);
@@ -80,11 +31,7 @@ export default function HomePage() {
       const user = await ensureSignedIn();
       const displayName = name.trim() || "作成者";
       localStorage.setItem("displayName", displayName);
-      const sessionId = await createSession(
-        user.uid,
-        displayName,
-        selectedDestination ?? undefined
-      );
+      const sessionId = await createSession(user.uid, displayName);
       router.push(`/session/${sessionId}`);
     } catch (err) {
       console.error(err);
@@ -119,55 +66,6 @@ export default function HomePage() {
           maxLength={20}
           className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-base outline-none transition focus:border-slate-900"
         />
-
-        <label className="mb-2 block text-xs font-medium text-slate-500">
-          目的地(任意)
-        </label>
-        <div className="relative mb-3">
-          <div className="relative">
-            <input
-              type="text"
-              value={destQuery}
-              onChange={(e) => {
-                setDestQuery(e.target.value);
-                if (selectedDestination) setSelectedDestination(null);
-              }}
-              onBlur={() => setTimeout(() => setDestSuggestions([]), 150)}
-              placeholder="例: 渋谷駅"
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 pr-10 text-base outline-none transition focus:border-slate-900"
-            />
-            {(destQuery || selectedDestination) && (
-              <button
-                onClick={handleClearDestination}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 active:text-slate-700"
-                aria-label="目的地をクリア"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          {destSuggestions.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-              {destSuggestions.map((f) => (
-                <li key={f.id}>
-                  <button
-                    onMouseDown={() => handleSelectDestination(f)}
-                    className="w-full px-4 py-3 text-left text-sm leading-snug text-slate-700 hover:bg-slate-50 active:bg-slate-100"
-                  >
-                    <span className="mr-1.5">📍</span>
-                    {f.place_name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {destSearching && (
-            <p className="mt-1 px-1 text-xs text-slate-400">検索中...</p>
-          )}
-          {selectedDestination && (
-            <p className="mt-1 px-1 text-xs text-emerald-600">✓ 目的地を設定しました</p>
-          )}
-        </div>
 
         <button
           onClick={handleCreate}

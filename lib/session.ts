@@ -144,6 +144,19 @@ export async function completeSession(sessionId: string): Promise<void> {
   await remove(sessionRef(sessionId));
 }
 
+/** 目的地ピンを設定・削除する */
+export async function setDestination(
+  sessionId: string,
+  destination: Destination | null
+): Promise<void> {
+  const destRef = ref(getDb(), `sessions/${sessionId}/destination`);
+  if (destination) {
+    await set(destRef, destination);
+  } else {
+    await remove(destRef);
+  }
+}
+
 /** 期限切れセッションを削除する */
 export async function deleteSession(sessionId: string): Promise<void> {
   await remove(sessionRef(sessionId));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -17,6 +17,8 @@ export type MapMarker = {
 type Props = {
   markers: MapMarker[];
   destination?: { lat: number; lng: number; name: string };
+  pinMode?: boolean;
+  onMapClick?: (lat: number, lng: number) => void;
 };
 
 function markerHtml(m: MapMarker): string {
@@ -70,29 +72,48 @@ function createDestinationElement(name: string): HTMLDivElement {
   return el;
 }
 
-export default function Map({ markers, destination }: Props) {
+export default function Map({ markers, destination, pinMode, onMapClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerObjsRef = useRef<Record<string, mapboxgl.Marker>>({});
   const destMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const prevFitKeyRef = useRef("");
+  const [mapReady, setMapReady] = useState(false);
+  const pinModeRef = useRef(pinMode);
+  const onMapClickRef = useRef(onMapClick);
+
+  useEffect(() => { pinModeRef.current = pinMode; }, [pinMode]);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
-    mapRef.current = new mapboxgl.Map({
+    const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/streets-v12",
       center: [139.7671, 35.6812], // 初期表示: 東京駅付近(位置取得までの仮表示)
       zoom: 12,
     });
+    map.on("load", () => setMapReady(true));
+    map.on("click", (e) => {
+      if (pinModeRef.current && onMapClickRef.current) {
+        onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
+      }
+    });
+    mapRef.current = map;
     return () => {
-      mapRef.current?.remove();
+      map.remove();
       mapRef.current = null;
       markerObjsRef.current = {};
       destMarkerRef.current = null;
+      setMapReady(false);
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    mapRef.current!.getCanvas().style.cursor = pinMode ? "crosshair" : "";
+  }, [pinMode, mapReady]);
 
   // 人マーカーの更新
   useEffect(() => {

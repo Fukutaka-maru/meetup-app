@@ -13,6 +13,7 @@ import {
   savePushSubscription,
   sendMessage,
   sessionRef,
+  setDestination,
   updateLocation,
   MAX_PARTICIPANTS,
   type SessionData,
@@ -114,6 +115,9 @@ export default function SessionPage({
   const [pushStatus, setPushStatus] = useState<PushStatus>("unsupported");
   const [showPushBanner, setShowPushBanner] = useState(false);
   const [pushEnabling, setPushEnabling] = useState(false);
+
+  const [isPinMode, setIsPinMode] = useState(false);
+  const [settingPin, setSettingPin] = useState(false);
 
   const completedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -534,6 +538,30 @@ export default function SessionPage({
     ? Math.max(0, Math.ceil((session.expiresAt - now) / 60000))
     : 0;
 
+  const handleMapClick = useCallback(
+    async (lat: number, lng: number) => {
+      setIsPinMode(false);
+      setSettingPin(true);
+      try {
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+        let name = "目的地";
+        if (token) {
+          const res = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&language=ja&limit=1`
+          );
+          const data = (await res.json()) as { features?: { place_name: string }[] };
+          if (data.features?.[0]?.place_name) name = data.features[0].place_name;
+        }
+        await setDestination(sessionId, { lat, lng, name });
+      } catch {
+        // ignore
+      } finally {
+        setSettingPin(false);
+      }
+    },
+    [sessionId]
+  );
+
   const handleSendChat = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || !user) return;
@@ -565,7 +593,12 @@ export default function SessionPage({
 
       {/* 地図 */}
       <div className="relative min-h-0 flex-1">
-        <Map markers={markers} destination={dest} />
+        <Map
+          markers={markers}
+          destination={dest}
+          pinMode={isPinMode}
+          onMapClick={handleMapClick}
+        />
         {toast && (
           <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-slate-900/90 px-5 py-2.5 text-sm font-medium text-white shadow-lg">
             {toast}
@@ -600,6 +633,35 @@ export default function SessionPage({
                 {pushEnabling ? "設定中..." : "許可する"}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ピン設定ボタン(左下) */}
+        {!isPinMode && !settingPin && (
+          <button
+            onClick={() => setIsPinMode(true)}
+            title="目的地を設定"
+            className="absolute bottom-4 left-4 rounded-full bg-white/90 px-3 py-2 text-base shadow-md active:bg-white"
+          >
+            📍
+          </button>
+        )}
+        {isPinMode && (
+          <>
+            <div className="pointer-events-none absolute inset-x-4 top-4 rounded-xl bg-slate-900/80 px-4 py-2.5 text-center text-sm font-medium text-white">
+              地図をタップして目的地を設定
+            </div>
+            <button
+              onClick={() => setIsPinMode(false)}
+              className="absolute bottom-4 left-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md active:bg-slate-800"
+            >
+              キャンセル
+            </button>
+          </>
+        )}
+        {settingPin && (
+          <div className="pointer-events-none absolute inset-x-4 top-4 rounded-xl bg-slate-900/80 px-4 py-2.5 text-center text-sm font-medium text-white">
+            目的地を設定中...
           </div>
         )}
 
@@ -706,8 +768,15 @@ export default function SessionPage({
           ) : dest ? (
             // 目的地モード: 全員の目的地までの時間を表示
             <div>
-              <p className="mb-1.5 text-center text-xs font-semibold text-red-500">
-                📍 {dest.name.length > 30 ? dest.name.slice(0, 30) + "…" : dest.name}
+              <p className="mb-1.5 flex items-center justify-center gap-2 text-xs font-semibold text-red-500">
+                <span>📍 {dest.name.length > 30 ? dest.name.slice(0, 30) + "…" : dest.name}</span>
+                <button
+                  onClick={() => setDestination(sessionId, null).catch(() => {})}
+                  className="font-normal text-slate-400 active:text-slate-700"
+                  aria-label="目的地を削除"
+                >
+                  ✕
+                </button>
               </p>
               <ul className="max-h-24 space-y-1 overflow-y-auto">
                 {/* 自分の目的地までの距離 */}
