@@ -19,6 +19,12 @@ const generateId = customAlphabet(
   12
 );
 
+export type Destination = {
+  lat: number;
+  lng: number;
+  name: string;
+};
+
 export type Participant = {
   name: string;
   lat?: number;
@@ -38,6 +44,7 @@ export type SessionData = {
   createdAt: number;
   expiresAt: number;
   status: "active" | "completed";
+  destination?: Destination;
   participants?: Record<string, Participant>;
   messages?: Record<string, Message>;
 };
@@ -49,7 +56,8 @@ export function sessionRef(sessionId: string) {
 /** セッションを作成し、自分を最初の参加者として登録する */
 export async function createSession(
   uid: string,
-  name: string
+  name: string,
+  destination?: Destination
 ): Promise<string> {
   const sessionId = generateId();
   const now = Date.now();
@@ -57,6 +65,7 @@ export async function createSession(
     createdAt: now,
     expiresAt: now + SESSION_TTL_MS,
     status: "active",
+    ...(destination && { destination }),
     participants: {
       [uid]: { name, lastUpdate: now },
     },

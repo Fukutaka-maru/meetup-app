@@ -518,9 +518,16 @@ export default function SessionPage({
       };
     });
 
+  const dest = session?.destination;
+
   const distanceTo = (p: (typeof others)[number][1]) =>
     self?.lat !== undefined && p.lat !== undefined
       ? distanceMeters(self.lat!, self.lng!, p.lat!, p.lng!)
+      : null;
+
+  const distToDest = (lat: number | undefined, lng: number | undefined) =>
+    lat !== undefined && dest
+      ? distanceMeters(lat, lng!, dest.lat, dest.lng)
       : null;
 
   const remainingMin = session
@@ -558,7 +565,7 @@ export default function SessionPage({
 
       {/* 地図 */}
       <div className="relative min-h-0 flex-1">
-        <Map markers={markers} />
+        <Map markers={markers} destination={dest} />
         {toast && (
           <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-slate-900/90 px-5 py-2.5 text-sm font-medium text-white shadow-lg">
             {toast}
@@ -696,7 +703,66 @@ export default function SessionPage({
             <p className="text-center text-slate-500">
               相手の参加を待っています... 上のボタンからURLを送ってください
             </p>
+          ) : dest ? (
+            // 目的地モード: 全員の目的地までの時間を表示
+            <div>
+              <p className="mb-1.5 text-center text-xs font-semibold text-red-500">
+                📍 {dest.name.length > 30 ? dest.name.slice(0, 30) + "…" : dest.name}
+              </p>
+              <ul className="max-h-24 space-y-1 overflow-y-auto">
+                {/* 自分の目的地までの距離 */}
+                {(() => {
+                  const d = distToDest(self?.lat, self?.lng);
+                  if (d === null) return null;
+                  return (
+                    <li className="flex items-center justify-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: SELF_COLOR }}
+                      />
+                      <span className="font-bold text-slate-800">
+                        自分
+                        <span className="ml-2 font-normal text-slate-500">
+                          {d >= TRANSIT_MIN_DISTANCE_M
+                            ? `徒歩約${walkingMinutes(d)}分 ・ 電車/バス目安${transitMinutes(d)}分`
+                            : `徒歩約${walkingMinutes(d)}分`}
+                        </span>
+                      </span>
+                    </li>
+                  );
+                })()}
+                {/* 相手の目的地までの距離 */}
+                {others.map(([uid, p]) => {
+                  const d = distToDest(p.lat, p.lng);
+                  const age = now - p.lastUpdate;
+                  const stale = age >= STALE_MS;
+                  return (
+                    <li key={uid} className="flex items-center justify-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: colorOf(uid), opacity: stale ? 0.4 : 1 }}
+                      />
+                      {d === null ? (
+                        <span className="text-slate-500">{p.name}さんの位置を取得中...</span>
+                      ) : (
+                        <span className={`font-bold ${stale ? "text-slate-400" : "text-slate-800"}`}>
+                          {p.name}さん
+                          <span className="ml-2 font-normal text-slate-500">
+                            {stale
+                              ? `${formatAge(age)}の位置`
+                              : d >= TRANSIT_MIN_DISTANCE_M
+                                ? `徒歩約${walkingMinutes(d)}分 ・ 電車/バス目安${transitMinutes(d)}分`
+                                : `徒歩約${walkingMinutes(d)}分`}
+                          </span>
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           ) : (
+            // 通常モード: 相手との距離を表示
             <ul className="max-h-24 space-y-1 overflow-y-auto">
               {others.map(([uid, p]) => {
                 const d = distanceTo(p);
