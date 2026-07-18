@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { onValue } from "firebase/database";
 import type { User } from "firebase/auth";
 import Map, { type MapMarker } from "@/components/Map";
@@ -10,6 +11,7 @@ import {
   completeSession,
   deleteSession,
   joinSession,
+  leaveSession,
   savePushSubscription,
   sendMessage,
   sessionRef,
@@ -97,6 +99,7 @@ export default function SessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = use(params);
+  const router = useRouter();
 
   const [screen, setScreen] = useState<Screen>("loading");
   const [user, setUser] = useState<User | null>(null);
@@ -118,6 +121,8 @@ export default function SessionPage({
 
   const [isPinMode, setIsPinMode] = useState(false);
   const [settingPin, setSettingPin] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const completedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -386,10 +391,36 @@ export default function SessionPage({
     setTimeout(() => setCopied(false), 2000);
   }, []);
 
-  const handleComplete = async () => {
+  const participantCount = Object.keys(session?.participants ?? {}).length;
+
+  const handleComplete = () => {
+    // 3人以上のセッションでは誤操作で全員のデータが消えるのを防ぐため、
+    // 「自分だけ退出」か「全員終了」かを選ばせる
+    if (participantCount >= 3) {
+      setShowLeaveModal(true);
+      return;
+    }
     if (!window.confirm("合流できましたか?位置共有を終了してデータを削除します。")) {
       return;
     }
+    completedRef.current = true;
+    setScreen("completed");
+    completeSession(sessionId).catch(() => {});
+  };
+
+  const handleLeaveOnly = async () => {
+    if (!user || leaving) return;
+    setLeaving(true);
+    try {
+      await leaveSession(sessionId, user.uid);
+      router.push("/");
+    } catch {
+      setLeaving(false);
+    }
+  };
+
+  const handleEndForAll = () => {
+    setShowLeaveModal(false);
     completedRef.current = true;
     setScreen("completed");
     completeSession(sessionId).catch(() => {});
@@ -761,6 +792,18 @@ export default function SessionPage({
       {/* フッター */}
       <footer className="space-y-3 border-t border-slate-100 bg-white px-4 pb-6 pt-3">
         <div className="text-sm">
+          {dest && (
+            <p className="mb-1.5 flex items-center justify-center gap-2 text-xs font-semibold text-red-500">
+              <span>📍 {dest.name.length > 30 ? dest.name.slice(0, 30) + "…" : dest.name}</span>
+              <button
+                onClick={() => setDestination(sessionId, null).catch(() => {})}
+                className="font-normal text-slate-400 active:text-slate-700"
+                aria-label="目的地を削除"
+              >
+                ✕
+              </button>
+            </p>
+          )}
           {others.length === 0 ? (
             <p className="text-center text-slate-500">
               相手の参加を待っています... 上のボタンからURLを送ってください
@@ -768,16 +811,6 @@ export default function SessionPage({
           ) : dest ? (
             // 目的地モード: 全員の目的地までの時間を表示
             <div>
-              <p className="mb-1.5 flex items-center justify-center gap-2 text-xs font-semibold text-red-500">
-                <span>📍 {dest.name.length > 30 ? dest.name.slice(0, 30) + "…" : dest.name}</span>
-                <button
-                  onClick={() => setDestination(sessionId, null).catch(() => {})}
-                  className="font-normal text-slate-400 active:text-slate-700"
-                  aria-label="目的地を削除"
-                >
-                  ✕
-                </button>
-              </p>
               <ul className="max-h-24 space-y-1 overflow-y-auto">
                 {/* 自分の目的地までの距離 */}
                 {(() => {
@@ -890,7 +923,70 @@ export default function SessionPage({
       </footer>
 
       {showGeoHelp && <GeoHelpModal onClose={() => setShowGeoHelp(false)} />}
+      {showLeaveModal && (
+        <LeaveModal
+          participantCount={participantCount}
+          leaving={leaving}
+          onLeaveOnly={handleLeaveOnly}
+          onEndForAll={handleEndForAll}
+          onClose={() => setShowLeaveModal(false)}
+        />
+      )}
     </main>
+  );
+}
+
+function LeaveModal({
+  participantCount,
+  leaving,
+  onLeaveOnly,
+  onEndForAll,
+  onClose,
+}: {
+  participantCount: number;
+  leaving: boolean;
+  onLeaveOnly: () => void;
+  onEndForAll: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-t-2xl bg-white p-6 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 text-lg font-semibold tracking-tight">
+          共有を終了しますか?
+        </h2>
+        <p className="mb-5 text-xs leading-relaxed text-slate-400">
+          現在{participantCount}人が参加中です。自分だけ退出することも、全員の待ち合わせを終了することもできます。
+        </p>
+        <div className="space-y-2">
+          <button
+            onClick={onLeaveOnly}
+            disabled={leaving}
+            className="w-full rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition active:bg-slate-50 disabled:opacity-40"
+          >
+            {leaving ? "退出中..." : "自分だけ退出する"}
+          </button>
+          <button
+            onClick={onEndForAll}
+            className="w-full rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-emerald-700"
+          >
+            全員の待ち合わせを終了する
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full rounded-full py-3 text-sm font-semibold text-slate-400 active:bg-slate-50"
+          >
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

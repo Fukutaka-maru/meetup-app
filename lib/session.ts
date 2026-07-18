@@ -96,6 +96,11 @@ export async function joinSession(
   } satisfies Participant);
 }
 
+/** 自分だけセッションから退出する(他の参加者はそのまま継続) */
+export async function leaveSession(sessionId: string, uid: string): Promise<void> {
+  await remove(ref(getDb(), `sessions/${sessionId}/participants/${uid}`));
+}
+
 /** 自分の現在位置を更新する */
 export async function updateLocation(
   sessionId: string,
