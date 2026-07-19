@@ -28,41 +28,42 @@ function offset(lat: number, lng: number, dNorthM: number, dEastM: number) {
 
 const SELF_COLOR = "#2563eb";
 const SELF_START = offset(DEST.lat, DEST.lng, 700, -450);
-const SELF_START_DELAY_MS = 600;
-const SELF_DURATION_MS = 12000;
+const SELF_START_DELAY_MS = 300;
+const SELF_DURATION_MS = 20000;
 
-type FriendConfig = {
+type PersonConfig = {
   id: string;
   name: string;
   color: string;
   start: { lat: number; lng: number };
-  /** 「URLを相手に送る」を押してから参加(=地図に出現)するまでの遅延 */
-  joinDelayMs: number;
-  /** 出現してから目的地に着くまでの移動時間 */
+  /** 「URLを相手に送る」を押してから移動を始めるまでの遅延 */
+  startDelayMs: number;
   durationMs: number;
-  /** 移動中にこのタイミングで送る一言(任意) */
   delayMessageAtMs?: number;
   delayMessageText?: string;
+  replies: string[];
 };
 
-const FRIENDS: FriendConfig[] = [
+const FRIENDS: PersonConfig[] = [
   {
     id: "yuki",
     name: "ゆき",
     color: "#f97316",
     start: offset(DEST.lat, DEST.lng, 650, 500),
-    joinDelayMs: 1200,
-    durationMs: 9000,
+    startDelayMs: 1200,
+    durationMs: 16000,
+    replies: ["了解です!もうすぐ着きます😊", "見えました!そっちに向かいますね"],
   },
   {
     id: "ken",
     name: "けん",
     color: "#16a34a",
     start: offset(DEST.lat, DEST.lng, -550, -600),
-    joinDelayMs: 2600,
-    durationMs: 23000,
-    delayMessageAtMs: 6000,
-    delayMessageText: "少し遅れます🙏",
+    startDelayMs: 2600,
+    durationMs: 34000,
+    delayMessageAtMs: 10000,
+    delayMessageText: "ちょっと遅れる🙏",
+    replies: ["おっけー、もうすぐ着くわ😊", "見えた!そっち行くね"],
   },
 ];
 
@@ -70,36 +71,95 @@ const TICK_MS = 200;
 const AUTO_REPLY_DELAY_MS = 1800;
 
 type ChatMsg = { id: string; from: string; name: string; text: string; mine: boolean };
+type RouteData = { coords: [number, number][]; cum: number[]; total: number };
 
 const QUICK_MESSAGES = ["今向かってます🚶", "着きました!", "少し遅れます🙏", "どこにいますか?"];
-const AUTO_REPLIES = ["了解です!もうすぐ着きます😊", "見えました!そっちに向かいますね"];
+
+function buildRouteData(coords: [number, number][]): RouteData {
+  const cum = [0];
+  let total = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [lng1, lat1] = coords[i];
+    const [lng2, lat2] = coords[i + 1];
+    total += distanceMeters(lat1, lng1, lat2, lng2);
+    cum.push(total);
+  }
+  return { coords, cum, total };
+}
+
+function pointAt(route: RouteData, t: number): { lat: number; lng: number } {
+  const clamped = Math.min(1, Math.max(0, t));
+  const target = route.total * clamped;
+  let idx = 0;
+  while (idx < route.cum.length - 2 && route.cum[idx + 1] < target) idx++;
+  const segStart = route.cum[idx];
+  const segEnd = route.cum[idx + 1] ?? route.total;
+  const segLen = segEnd - segStart;
+  const segT = segLen > 0 ? (target - segStart) / segLen : 0;
+  const [lng1, lat1] = route.coords[idx];
+  const [lng2, lat2] = route.coords[Math.min(idx + 1, route.coords.length - 1)];
+  return { lat: lat1 + (lat2 - lat1) * segT, lng: lng1 + (lng2 - lng1) * segT };
+}
+
+async function fetchWalkingRoute(
+  start: { lat: number; lng: number },
+  dest: { lat: number; lng: number }
+): Promise<RouteData> {
+  const straight = buildRouteData([
+    [start.lng, start.lat],
+    [dest.lng, dest.lat],
+  ]);
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token) return straight;
+  try {
+    const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${start.lng},${start.lat};${dest.lng},${dest.lat}?geometries=geojson&overview=full&access_token=${token}`;
+    const res = await fetch(url);
+    const data = (await res.json()) as {
+      routes?: { geometry: { coordinates: [number, number][] } }[];
+    };
+    const coords = data.routes?.[0]?.geometry?.coordinates;
+    if (!coords || coords.length < 2) return straight;
+    return buildRouteData(coords);
+  } catch {
+    return straight;
+  }
+}
 
 export default function DemoPage() {
-  const [phase, setPhase] = useState<"start" | "session">("start");
+  const [phase, setPhase] = useState<"start" | "session" | "completed">("start");
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
   const [remainingMin, setRemainingMin] = useState(59);
   const [visibleFriendIds, setVisibleFriendIds] = useState<string[]>([]);
+  const [selfMoving, setSelfMoving] = useState(false);
   const [, forceTick] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
 
+  const routesRef = useRef<Record<string, RouteData>>({});
   const startTimesRef = useRef<Record<string, number>>({});
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleStart = () => setPhase("session");
 
-  // セッション画面表示後、少し待って自分の移動を開始
+  // セッション表示時点で、自分と友達それぞれの徒歩ルート(道路沿い)を先読みしておく
   useEffect(() => {
     if (phase !== "session") return;
-    const t = setTimeout(() => {
-      startTimesRef.current.self = Date.now();
-      forceTick((n) => n + 1);
-    }, SELF_START_DELAY_MS);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    fetchWalkingRoute(SELF_START, DEST).then((r) => {
+      if (!cancelled) routesRef.current.self = r;
+    });
+    for (const f of FRIENDS) {
+      fetchWalkingRoute(f.start, DEST).then((r) => {
+        if (!cancelled) routesRef.current[f.id] = r;
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [phase]);
 
   // 全体を再描画するためのタイマー(進行中は動かし続ける)
@@ -130,11 +190,17 @@ export default function DemoPage() {
     if (shared) return;
     setShared(true);
 
+    const selfTimer = setTimeout(() => {
+      startTimesRef.current.self = Date.now();
+      setSelfMoving(true);
+    }, SELF_START_DELAY_MS);
+    timersRef.current.push(selfTimer);
+
     for (const friend of FRIENDS) {
       const joinTimer = setTimeout(() => {
         startTimesRef.current[friend.id] = Date.now();
         setVisibleFriendIds((prev) => [...prev, friend.id]);
-      }, friend.joinDelayMs);
+      }, friend.startDelayMs);
       timersRef.current.push(joinTimer);
 
       if (friend.delayMessageAtMs && friend.delayMessageText) {
@@ -151,39 +217,32 @@ export default function DemoPage() {
               },
             ]);
           },
-          friend.joinDelayMs + friend.delayMessageAtMs
+          friend.startDelayMs + friend.delayMessageAtMs
         );
         timersRef.current.push(msgTimer);
       }
     }
   };
 
-  const progressOf = (id: string, durationMs: number) => {
-    const start = startTimesRef.current[id];
-    if (!start) return 0;
-    return Math.min(1, (Date.now() - start) / durationMs);
+  const positionOf = (id: string, start: { lat: number; lng: number }, durationMs: number) => {
+    const startedAt = startTimesRef.current[id];
+    if (!startedAt) return { lat: start.lat, lng: start.lng, t: 0 };
+    const t = Math.min(1, (Date.now() - startedAt) / durationMs);
+    const route = routesRef.current[id] ?? buildRouteData([
+      [start.lng, start.lat],
+      [DEST.lng, DEST.lat],
+    ]);
+    const p = pointAt(route, t);
+    return { ...p, t };
   };
 
   const selfName = name.trim() || "自分";
-  const selfProgress = progressOf("self", SELF_DURATION_MS);
-  const self = {
-    id: "self",
-    name: selfName,
-    color: SELF_COLOR,
-    lat: SELF_START.lat + (DEST.lat - SELF_START.lat) * selfProgress,
-    lng: SELF_START.lng + (DEST.lng - SELF_START.lng) * selfProgress,
-  };
+  const selfPos = positionOf("self", SELF_START, SELF_DURATION_MS);
+  const self = { id: "self", name: selfName, color: SELF_COLOR, lat: selfPos.lat, lng: selfPos.lng };
 
   const others = FRIENDS.filter((f) => visibleFriendIds.includes(f.id)).map((f) => {
-    const t = progressOf(f.id, f.durationMs);
-    return {
-      id: f.id,
-      name: f.name,
-      color: f.color,
-      lat: f.start.lat + (DEST.lat - f.start.lat) * t,
-      lng: f.start.lng + (DEST.lng - f.start.lng) * t,
-      arrived: t >= 1,
-    };
+    const pos = positionOf(f.id, f.start, f.durationMs);
+    return { id: f.id, name: f.name, color: f.color, lat: pos.lat, lng: pos.lng, arrived: pos.t >= 1 };
   });
 
   const markers: MapMarker[] = [
@@ -211,12 +270,17 @@ export default function DemoPage() {
     replyTimerRef.current = setTimeout(() => {
       const candidates = FRIENDS.filter((f) => visibleFriendIds.includes(f.id));
       const replyFrom = candidates[Math.floor(Math.random() * candidates.length)];
-      const text = AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)];
+      const text = replyFrom.replies[Math.floor(Math.random() * replyFrom.replies.length)];
       setMessages((prev) => [
         ...prev,
         { id: `${Date.now()}-r`, from: replyFrom.id, name: replyFrom.name, text, mine: false },
       ]);
     }, AUTO_REPLY_DELAY_MS);
+  };
+
+  const handleComplete = () => {
+    if (!window.confirm("合流できましたか?位置共有を終了してデータを削除します。")) return;
+    setPhase("completed");
   };
 
   if (phase === "start") {
@@ -254,6 +318,24 @@ export default function DemoPage() {
             待ち合わせを開始
           </button>
         </div>
+      </main>
+    );
+  }
+
+  if (phase === "completed") {
+    return (
+      <main className="flex min-h-full flex-col items-center justify-center bg-white px-6 text-center">
+        <div className="mb-4 text-4xl">🎉</div>
+        <h1 className="mb-2 text-xl font-semibold tracking-tight">合流できました!</h1>
+        <p className="mb-8 text-sm leading-relaxed text-slate-400">
+          お疲れさまでした。位置情報はすべて削除されました。
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-slate-800"
+        >
+          新しい待ち合わせを作る
+        </button>
       </main>
     );
   }
@@ -369,7 +451,7 @@ export default function DemoPage() {
 
       {/* フッター */}
       <footer className="space-y-2 border-t border-slate-100 bg-white px-4 pb-6 pt-2.5">
-        {others.length === 0 ? (
+        {others.length === 0 && !selfMoving ? (
           <p className="text-center text-sm text-slate-500">
             相手の参加を待っています... 上のボタンからURLを送ってください
           </p>
@@ -402,7 +484,10 @@ export default function DemoPage() {
           >
             チャット
           </button>
-          <button className="flex-[2] rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-emerald-700">
+          <button
+            onClick={handleComplete}
+            className="flex-[2] rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-emerald-700"
+          >
             合流できた!(共有を終了)
           </button>
         </div>
