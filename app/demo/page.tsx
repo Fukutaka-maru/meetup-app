@@ -36,14 +36,15 @@ type Person = {
 
 const SELF_COLOR = "#2563eb";
 
-const PEOPLE: Person[] = [
-  { id: "self", name: "自分", color: SELF_COLOR, isSelf: true, start: offset(DEST.lat, DEST.lng, 700, -450) },
+const FRIEND_STARTS = [
   { id: "yuki", name: "ゆき", color: "#f97316", start: offset(DEST.lat, DEST.lng, 650, 500) },
   { id: "ken", name: "けん", color: "#16a34a", start: offset(DEST.lat, DEST.lng, -550, -600) },
 ];
+const SELF_START = offset(DEST.lat, DEST.lng, 700, -450);
 
 const ANIM_STEPS = 14;
 const ANIM_INTERVAL_MS = 900;
+const AUTO_START_DELAY_MS = 1500;
 const AUTO_REPLY_DELAY_MS = 1800;
 
 type ChatMsg = { id: string; from: string; name: string; text: string; mine: boolean };
@@ -52,20 +53,42 @@ const QUICK_MESSAGES = ["今向かってます🚶", "着きました!", "少し
 const AUTO_REPLIES = ["了解です!もうすぐ着きます😊", "見えました!そっちに向かいますね"];
 
 export default function DemoPage() {
+  const [phase, setPhase] = useState<"start" | "session">("start");
+  const [name, setName] = useState("");
   const [progress, setProgress] = useState(0); // 0..1
   const [playing, setPlaying] = useState(false);
-  const [remainingMin, setRemainingMin] = useState(58);
+  const [remainingMin, setRemainingMin] = useState(59);
+  const [copied, setCopied] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const stepRef = useRef(0);
   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const play = () => {
-    setPlaying(true);
-    stepRef.current = 0;
-    setProgress(0);
+  const people: Person[] = [
+    { id: "self", name: name.trim() || "自分", color: SELF_COLOR, isSelf: true, start: SELF_START },
+    ...FRIEND_STARTS,
+  ];
+
+  const handleStart = () => {
+    setPhase("session");
   };
+
+  const handleShare = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // セッション画面に入ったら少し待って自動的に収束アニメーションを開始
+  useEffect(() => {
+    if (phase !== "session") return;
+    const timer = setTimeout(() => {
+      setPlaying(true);
+      stepRef.current = 0;
+      setProgress(0);
+    }, AUTO_START_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
 
   useEffect(() => {
     if (!playing) return;
@@ -83,11 +106,12 @@ export default function DemoPage() {
 
   // 分表示をゆっくり減らす(見た目のリアリティ用)
   useEffect(() => {
+    if (phase !== "session") return;
     const interval = setInterval(() => {
-      setRemainingMin((m) => (m > 1 ? m - 1 : 58));
+      setRemainingMin((m) => (m > 1 ? m - 1 : 59));
     }, 20000);
     return () => clearInterval(interval);
-  }, []);
+  }, [phase]);
 
   useEffect(() => {
     return () => {
@@ -95,7 +119,7 @@ export default function DemoPage() {
     };
   }, []);
 
-  const positions = PEOPLE.map((p) => ({
+  const positions = people.map((p) => ({
     ...p,
     lat: p.start.lat + (DEST.lat - p.start.lat) * progress,
     lng: p.start.lng + (DEST.lng - p.start.lng) * progress,
@@ -124,12 +148,12 @@ export default function DemoPage() {
     if (!trimmed) return;
     setMessages((prev) => [
       ...prev,
-      { id: `${Date.now()}`, from: "self", name: "自分", text: trimmed, mine: true },
+      { id: `${Date.now()}`, from: "self", name: self.name, text: trimmed, mine: true },
     ]);
     setChatInput("");
     if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
     replyTimerRef.current = setTimeout(() => {
-      const replyFrom = Math.random() > 0.5 ? PEOPLE[1] : PEOPLE[2];
+      const replyFrom = Math.random() > 0.5 ? FRIEND_STARTS[0] : FRIEND_STARTS[1];
       const text = AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)];
       setMessages((prev) => [
         ...prev,
@@ -137,6 +161,45 @@ export default function DemoPage() {
       ]);
     }, AUTO_REPLY_DELAY_MS);
   };
+
+  if (phase === "start") {
+    return (
+      <main className="flex min-h-full flex-col items-center justify-center bg-white px-6 py-12">
+        <div className="w-full max-w-xs">
+          <div className="mb-12 text-center">
+            <Logo className="mx-auto mb-5 h-16 w-auto" />
+            <h1 className="mb-3 text-2xl font-semibold tracking-tight text-slate-900">
+              dotdot meet
+            </h1>
+            <p className="text-sm leading-relaxed text-slate-400">
+              待ち合わせのときだけ、お互いの位置を共有。
+              <br />
+              合流したら自動で消えます。登録不要。
+            </p>
+          </div>
+
+          <label className="mb-2 block text-xs font-medium text-slate-500">
+            表示名(相手に見える名前)
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="例: たかし"
+            maxLength={20}
+            className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-base outline-none transition focus:border-slate-900"
+          />
+
+          <button
+            onClick={handleStart}
+            className="w-full rounded-full bg-slate-900 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] active:bg-slate-800"
+          >
+            待ち合わせを開始
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex h-full flex-col">
@@ -150,11 +213,10 @@ export default function DemoPage() {
             </span>
           </div>
           <button
-            onClick={play}
-            disabled={playing}
-            className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white active:bg-slate-800 disabled:opacity-40"
+            onClick={handleShare}
+            className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white active:bg-slate-800"
           >
-            {playing ? "移動中..." : "▶ 合流アニメーション開始"}
+            {copied ? "コピーしました!" : "URLを相手に送る"}
           </button>
         </div>
         <div className="flex items-center justify-center gap-2 border-t border-slate-50 px-4 py-1 text-xs font-semibold text-red-500">
@@ -191,7 +253,7 @@ export default function DemoPage() {
                   {!msg.mine && (
                     <span
                       className="mb-0.5 ml-1 text-[10px] font-medium"
-                      style={{ color: PEOPLE.find((p) => p.id === msg.from)?.color }}
+                      style={{ color: FRIEND_STARTS.find((p) => p.id === msg.from)?.color }}
                     >
                       {msg.name}
                     </span>
@@ -253,7 +315,7 @@ export default function DemoPage() {
         <div className="flex gap-1.5 overflow-x-auto pb-0.5">
           <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1.5 text-xs">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: self.color }} />
-            <span className="font-bold text-slate-800">自分</span>
+            <span className="font-bold text-slate-800">{self.name}</span>
             <span className="text-slate-500">{timeLabel(distToDest(self.lat, self.lng))}</span>
           </span>
           {others.map((p) => (
