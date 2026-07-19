@@ -137,13 +137,21 @@ export default function DemoPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [unread, setUnread] = useState(0);
 
   const routesRef = useRef<Record<string, RouteData>>({});
   const startTimesRef = useRef<Record<string, number>>({});
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatOpenRef = useRef(false);
 
   const handleStart = () => setPhase("session");
+
+  // チャット開閉の反映と、開いたときの未読リセット
+  useEffect(() => {
+    chatOpenRef.current = chatOpen;
+    if (chatOpen) setUnread(0);
+  }, [chatOpen]);
 
   // セッション表示時点で、自分と友達それぞれの徒歩ルート(道路沿い)を先読みしておく
   useEffect(() => {
@@ -216,6 +224,7 @@ export default function DemoPage() {
                 mine: false,
               },
             ]);
+            if (!chatOpenRef.current) setUnread((n) => n + 1);
           },
           friend.startDelayMs + friend.delayMessageAtMs
         );
@@ -275,6 +284,7 @@ export default function DemoPage() {
         ...prev,
         { id: `${Date.now()}-r`, from: replyFrom.id, name: replyFrom.name, text, mine: false },
       ]);
+      if (!chatOpenRef.current) setUnread((n) => n + 1);
     }, AUTO_REPLY_DELAY_MS);
   };
 
@@ -483,6 +493,11 @@ export default function DemoPage() {
             className="relative flex-1 rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition active:bg-slate-50"
           >
             チャット
+            {unread > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                {unread}
+              </span>
+            )}
           </button>
           <button
             onClick={handleComplete}
