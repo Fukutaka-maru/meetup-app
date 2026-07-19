@@ -26,25 +26,47 @@ function offset(lat: number, lng: number, dNorthM: number, dEastM: number) {
   };
 }
 
-type Person = {
+const SELF_COLOR = "#2563eb";
+const SELF_START = offset(DEST.lat, DEST.lng, 700, -450);
+const SELF_START_DELAY_MS = 600;
+const SELF_DURATION_MS = 12000;
+
+type FriendConfig = {
   id: string;
   name: string;
   color: string;
-  isSelf?: boolean;
   start: { lat: number; lng: number };
+  /** 「URLを相手に送る」を押してから参加(=地図に出現)するまでの遅延 */
+  joinDelayMs: number;
+  /** 出現してから目的地に着くまでの移動時間 */
+  durationMs: number;
+  /** 移動中にこのタイミングで送る一言(任意) */
+  delayMessageAtMs?: number;
+  delayMessageText?: string;
 };
 
-const SELF_COLOR = "#2563eb";
-
-const FRIEND_STARTS = [
-  { id: "yuki", name: "ゆき", color: "#f97316", start: offset(DEST.lat, DEST.lng, 650, 500) },
-  { id: "ken", name: "けん", color: "#16a34a", start: offset(DEST.lat, DEST.lng, -550, -600) },
+const FRIENDS: FriendConfig[] = [
+  {
+    id: "yuki",
+    name: "ゆき",
+    color: "#f97316",
+    start: offset(DEST.lat, DEST.lng, 650, 500),
+    joinDelayMs: 1200,
+    durationMs: 9000,
+  },
+  {
+    id: "ken",
+    name: "けん",
+    color: "#16a34a",
+    start: offset(DEST.lat, DEST.lng, -550, -600),
+    joinDelayMs: 2600,
+    durationMs: 23000,
+    delayMessageAtMs: 6000,
+    delayMessageText: "少し遅れます🙏",
+  },
 ];
-const SELF_START = offset(DEST.lat, DEST.lng, 700, -450);
 
-const ANIM_STEPS = 14;
-const ANIM_INTERVAL_MS = 900;
-const AUTO_START_DELAY_MS = 1500;
+const TICK_MS = 200;
 const AUTO_REPLY_DELAY_MS = 1800;
 
 type ChatMsg = { id: string; from: string; name: string; text: string; mine: boolean };
@@ -55,56 +77,38 @@ const AUTO_REPLIES = ["了解です!もうすぐ着きます😊", "見えまし
 export default function DemoPage() {
   const [phase, setPhase] = useState<"start" | "session">("start");
   const [name, setName] = useState("");
-  const [progress, setProgress] = useState(0); // 0..1
-  const [playing, setPlaying] = useState(false);
-  const [remainingMin, setRemainingMin] = useState(59);
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
+  const [remainingMin, setRemainingMin] = useState(59);
+  const [visibleFriendIds, setVisibleFriendIds] = useState<string[]>([]);
+  const [, forceTick] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const stepRef = useRef(0);
+
+  const startTimesRef = useRef<Record<string, number>>({});
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const people: Person[] = [
-    { id: "self", name: name.trim() || "自分", color: SELF_COLOR, isSelf: true, start: SELF_START },
-    ...FRIEND_STARTS,
-  ];
+  const handleStart = () => setPhase("session");
 
-  const handleStart = () => {
-    setPhase("session");
-  };
-
-  const handleShare = () => {
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // セッション画面に入ったら少し待って自動的に収束アニメーションを開始
+  // セッション画面表示後、少し待って自分の移動を開始
   useEffect(() => {
     if (phase !== "session") return;
-    const timer = setTimeout(() => {
-      setPlaying(true);
-      stepRef.current = 0;
-      setProgress(0);
-    }, AUTO_START_DELAY_MS);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => {
+      startTimesRef.current.self = Date.now();
+      forceTick((n) => n + 1);
+    }, SELF_START_DELAY_MS);
+    return () => clearTimeout(t);
   }, [phase]);
 
+  // 全体を再描画するためのタイマー(進行中は動かし続ける)
   useEffect(() => {
-    if (!playing) return;
-    const interval = setInterval(() => {
-      stepRef.current += 1;
-      const t = Math.min(1, stepRef.current / ANIM_STEPS);
-      setProgress(t);
-      if (t >= 1) {
-        clearInterval(interval);
-        setPlaying(false);
-      }
-    }, ANIM_INTERVAL_MS);
+    if (phase !== "session") return;
+    const interval = setInterval(() => forceTick((n) => n + 1), TICK_MS);
     return () => clearInterval(interval);
-  }, [playing]);
+  }, [phase]);
 
-  // 分表示をゆっくり減らす(見た目のリアリティ用)
   useEffect(() => {
     if (phase !== "session") return;
     const interval = setInterval(() => {
@@ -116,25 +120,76 @@ export default function DemoPage() {
   useEffect(() => {
     return () => {
       if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
+      timersRef.current.forEach(clearTimeout);
     };
   }, []);
 
-  const positions = people.map((p) => ({
-    ...p,
-    lat: p.start.lat + (DEST.lat - p.start.lat) * progress,
-    lng: p.start.lng + (DEST.lng - p.start.lng) * progress,
-  }));
+  const handleShare = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    if (shared) return;
+    setShared(true);
 
-  const self = positions.find((p) => p.isSelf)!;
-  const others = positions.filter((p) => !p.isSelf);
+    for (const friend of FRIENDS) {
+      const joinTimer = setTimeout(() => {
+        startTimesRef.current[friend.id] = Date.now();
+        setVisibleFriendIds((prev) => [...prev, friend.id]);
+      }, friend.joinDelayMs);
+      timersRef.current.push(joinTimer);
 
-  const markers: MapMarker[] = positions.map((p) => ({
-    id: p.id,
-    lat: p.lat,
-    lng: p.lng,
-    label: p.isSelf ? `${p.name}(自分)` : p.name,
-    color: p.color,
-  }));
+      if (friend.delayMessageAtMs && friend.delayMessageText) {
+        const msgTimer = setTimeout(
+          () => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `${Date.now()}-${friend.id}-delay`,
+                from: friend.id,
+                name: friend.name,
+                text: friend.delayMessageText!,
+                mine: false,
+              },
+            ]);
+          },
+          friend.joinDelayMs + friend.delayMessageAtMs
+        );
+        timersRef.current.push(msgTimer);
+      }
+    }
+  };
+
+  const progressOf = (id: string, durationMs: number) => {
+    const start = startTimesRef.current[id];
+    if (!start) return 0;
+    return Math.min(1, (Date.now() - start) / durationMs);
+  };
+
+  const selfName = name.trim() || "自分";
+  const selfProgress = progressOf("self", SELF_DURATION_MS);
+  const self = {
+    id: "self",
+    name: selfName,
+    color: SELF_COLOR,
+    lat: SELF_START.lat + (DEST.lat - SELF_START.lat) * selfProgress,
+    lng: SELF_START.lng + (DEST.lng - SELF_START.lng) * selfProgress,
+  };
+
+  const others = FRIENDS.filter((f) => visibleFriendIds.includes(f.id)).map((f) => {
+    const t = progressOf(f.id, f.durationMs);
+    return {
+      id: f.id,
+      name: f.name,
+      color: f.color,
+      lat: f.start.lat + (DEST.lat - f.start.lat) * t,
+      lng: f.start.lng + (DEST.lng - f.start.lng) * t,
+      arrived: t >= 1,
+    };
+  });
+
+  const markers: MapMarker[] = [
+    { id: self.id, lat: self.lat, lng: self.lng, label: `${self.name}(自分)`, color: self.color },
+    ...others.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, label: p.name, color: p.color })),
+  ];
 
   const distToDest = (lat: number, lng: number) => distanceMeters(lat, lng, DEST.lat, DEST.lng);
 
@@ -151,9 +206,11 @@ export default function DemoPage() {
       { id: `${Date.now()}`, from: "self", name: self.name, text: trimmed, mine: true },
     ]);
     setChatInput("");
+    if (visibleFriendIds.length === 0) return;
     if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
     replyTimerRef.current = setTimeout(() => {
-      const replyFrom = Math.random() > 0.5 ? FRIEND_STARTS[0] : FRIEND_STARTS[1];
+      const candidates = FRIENDS.filter((f) => visibleFriendIds.includes(f.id));
+      const replyFrom = candidates[Math.floor(Math.random() * candidates.length)];
       const text = AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)];
       setMessages((prev) => [
         ...prev,
@@ -253,7 +310,7 @@ export default function DemoPage() {
                   {!msg.mine && (
                     <span
                       className="mb-0.5 ml-1 text-[10px] font-medium"
-                      style={{ color: FRIEND_STARTS.find((p) => p.id === msg.from)?.color }}
+                      style={{ color: FRIENDS.find((p) => p.id === msg.from)?.color }}
                     >
                       {msg.name}
                     </span>
@@ -312,23 +369,31 @@ export default function DemoPage() {
 
       {/* フッター */}
       <footer className="space-y-2 border-t border-slate-100 bg-white px-4 pb-6 pt-2.5">
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1.5 text-xs">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: self.color }} />
-            <span className="font-bold text-slate-800">{self.name}</span>
-            <span className="text-slate-500">{timeLabel(distToDest(self.lat, self.lng))}</span>
-          </span>
-          {others.map((p) => (
-            <span
-              key={p.id}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1.5 text-xs"
-            >
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
-              <span className="font-bold text-slate-800">{p.name}</span>
-              <span className="text-slate-500">{timeLabel(distToDest(p.lat, p.lng))}</span>
+        {others.length === 0 ? (
+          <p className="text-center text-sm text-slate-500">
+            相手の参加を待っています... 上のボタンからURLを送ってください
+          </p>
+        ) : (
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1.5 text-xs">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: self.color }} />
+              <span className="font-bold text-slate-800">{self.name}</span>
+              <span className="text-slate-500">{timeLabel(distToDest(self.lat, self.lng))}</span>
             </span>
-          ))}
-        </div>
+            {others.map((p) => (
+              <span
+                key={p.id}
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-100 px-3 py-1.5 text-xs"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
+                <span className="font-bold text-slate-800">{p.name}</span>
+                <span className="text-slate-500">
+                  {p.arrived ? "到着!" : timeLabel(distToDest(p.lat, p.lng))}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
