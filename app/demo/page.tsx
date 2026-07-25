@@ -289,7 +289,6 @@ export default function DemoPage() {
   };
 
   const handleComplete = () => {
-    if (!window.confirm("合流できましたか?位置共有を終了してデータを削除します。")) return;
     setPhase("completed");
   };
 
