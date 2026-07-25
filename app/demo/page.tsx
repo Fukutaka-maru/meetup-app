@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Map, { type MapHandle, type MapMarker } from "@/components/Map";
+import Map, { type MapMarker } from "@/components/Map";
 import Logo from "@/components/Logo";
 import {
   distanceMeters,
@@ -138,9 +138,7 @@ export default function DemoPage() {
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [unread, setUnread] = useState(0);
-  const [mapZoom, setMapZoom] = useState(15);
 
-  const mapHandleRef = useRef<MapHandle>(null);
   const routesRef = useRef<Record<string, RouteData>>({});
   const startTimesRef = useRef<Record<string, number>>({});
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -376,33 +374,7 @@ export default function DemoPage() {
 
       {/* 地図 */}
       <div className="relative min-h-0 flex-1">
-        <Map
-          ref={mapHandleRef}
-          markers={markers}
-          destination={DEST}
-          onZoomChange={setMapZoom}
-        />
-
-        {/* ズームスライダー(画面右端に常時表示) */}
-        <div className="fixed right-2 top-1/2 z-50 flex -translate-y-1/2 flex-col items-center gap-1 rounded-full bg-white/90 px-1.5 py-2.5 text-slate-500 shadow-lg backdrop-blur">
-          <span className="text-[10px] font-medium leading-none">+</span>
-          <input
-            type="range"
-            min={10}
-            max={19}
-            step={0.1}
-            value={mapZoom}
-            onChange={(e) => {
-              const z = Number(e.target.value);
-              setMapZoom(z);
-              mapHandleRef.current?.zoomTo(z);
-            }}
-            className="h-20 w-3.5 cursor-pointer accent-blue-600"
-            style={{ writingMode: "vertical-lr", direction: "rtl" }}
-            aria-label="地図のズーム"
-          />
-          <span className="text-[10px] font-medium leading-none">−</span>
-        </div>
+        <Map markers={markers} destination={DEST} />
 
         {chatOpen && (
           <div className="absolute inset-x-0 bottom-0 flex max-h-[45%] flex-col rounded-t-2xl border-t border-slate-200 bg-white/95 backdrop-blur">

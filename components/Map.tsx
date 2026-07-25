@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -14,18 +14,11 @@ export type MapMarker = {
   sublabel?: string;
 };
 
-export type MapHandle = {
-  /** 現在の中心を保ったままズームレベルをなめらかに変更する */
-  zoomTo: (zoom: number) => void;
-};
-
 type Props = {
   markers: MapMarker[];
   destination?: { lat: number; lng: number; name: string };
   pinMode?: boolean;
   onMapClick?: (lat: number, lng: number) => void;
-  /** 現在のズームレベルが変わるたびに呼ばれる(ユーザー操作・プログラム操作どちらも) */
-  onZoomChange?: (zoom: number) => void;
 };
 
 function markerHtml(m: MapMarker): string {
@@ -79,10 +72,7 @@ function createDestinationElement(name: string): HTMLDivElement {
   return el;
 }
 
-const Map = forwardRef<MapHandle, Props>(function Map(
-  { markers, destination, pinMode, onMapClick, onZoomChange },
-  ref
-) {
+export default function Map({ markers, destination, pinMode, onMapClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerObjsRef = useRef<Record<string, mapboxgl.Marker>>({});
@@ -91,17 +81,9 @@ const Map = forwardRef<MapHandle, Props>(function Map(
   const [mapReady, setMapReady] = useState(false);
   const pinModeRef = useRef(pinMode);
   const onMapClickRef = useRef(onMapClick);
-  const onZoomChangeRef = useRef(onZoomChange);
 
   useEffect(() => { pinModeRef.current = pinMode; }, [pinMode]);
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
-  useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
-
-  useImperativeHandle(ref, () => ({
-    zoomTo: (zoom: number) => {
-      mapRef.current?.easeTo({ zoom, duration: 250 });
-    },
-  }), []);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -117,9 +99,6 @@ const Map = forwardRef<MapHandle, Props>(function Map(
       if (pinModeRef.current && onMapClickRef.current) {
         onMapClickRef.current(e.lngLat.lat, e.lngLat.lng);
       }
-    });
-    map.on("zoom", () => {
-      onZoomChangeRef.current?.(map.getZoom());
     });
     mapRef.current = map;
     return () => {
@@ -218,9 +197,7 @@ const Map = forwardRef<MapHandle, Props>(function Map(
       )}
     </div>
   );
-});
-
-export default Map;
+}
 
 function fitToPoints(
   map: mapboxgl.Map,
