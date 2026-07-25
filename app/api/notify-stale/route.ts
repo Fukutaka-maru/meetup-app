@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   if (!vapidPublic || !vapidPrivate) {
     return NextResponse.json({ error: "vapid-not-configured" }, { status: 500 });
   }
-  webpush.setVapidDetails("mailto:noreply@dotdotmeet.app", vapidPublic, vapidPrivate);
+  webpush.setVapidDetails("mailto:noreply@dotmeet.app", vapidPublic, vapidPrivate);
 
   const db = getAdminDb();
   const participantRef = db.ref(`sessions/${sessionId}/participants/${uid}`);
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     await webpush.sendNotification(
       subscription,
       JSON.stringify({
-        title: "Dotdot Meet",
+        title: "Dot Meet",
         body: "位置情報の更新が止まっています。アプリを開いて更新してください。",
         url: `/session/${sessionId}`,
       })

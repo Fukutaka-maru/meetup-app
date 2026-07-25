@@ -2,7 +2,7 @@ type Props = {
   className?: string;
 };
 
-// 2人の棒人間が手を伸ばし合い、その間に「・・」(dotdot)が浮かぶロゴ。
+// 2人の棒人間が手を伸ばし合い、その間に「・・」(dot)が浮かぶロゴ。
 // 人物はモノトーン、間の2ドットだけがブランドカラー(青=自分/オレンジ=相手、
 // 地図マーカーの色と対応)。
 export default function Logo({ className = "h-16 w-auto" }: Props) {
@@ -24,7 +24,7 @@ export default function Logo({ className = "h-16 w-auto" }: Props) {
         <path d="M97 66 L107 92" />
         <path d="M97 66 L86 90" />
       </g>
-      {/* 2人の手の間の「・・」= dotdot */}
+      {/* 2人の手の間の「・・」= dot */}
       <circle cx="66.5" cy="33" r="3.5" fill="#2563eb" />
       <circle cx="73.5" cy="33" r="3.5" fill="#f97316" />
     </svg>

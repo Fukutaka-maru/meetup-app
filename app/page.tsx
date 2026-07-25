@@ -46,7 +46,7 @@ export default function HomePage() {
         <div className="mb-12 text-center">
           <Logo className="mx-auto mb-5 h-16 w-auto" />
           <h1 className="mb-3 text-2xl font-semibold tracking-tight text-slate-900">
-            dotdot meet
+            dot meet
           </h1>
           <p className="text-sm leading-relaxed text-slate-400">
             待ち合わせのときだけ、お互いの位置を共有。

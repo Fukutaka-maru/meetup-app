@@ -376,7 +376,7 @@ export default function SessionPage({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Dotdot Meet - 待ち合わせ位置共有",
+          title: "Dot Meet - 待ち合わせ位置共有",
           text: "このURLを開くと待ち合わせ中の位置を共有できます(1時間で消えます)",
           url,
         });
