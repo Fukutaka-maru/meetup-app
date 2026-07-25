@@ -41,17 +41,47 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center bg-white px-6 py-12">
+    <main className="flex min-h-full flex-col items-center bg-white px-6 py-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            {
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "Dot Meet",
+              alternateName: "ドットミート",
+              url: "https://dot-meet.com",
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "Dot Meet",
+              alternateName: "ドットミート",
+              url: "https://dot-meet.com",
+              applicationCategory: "UtilitiesApplication",
+              operatingSystem: "Web",
+            },
+          ]),
+        }}
+      />
+
       <div className="w-full max-w-xs">
         <div className="mb-12 text-center">
           <Logo className="mx-auto mb-5 h-16 w-auto" />
           <h1 className="mb-3 text-2xl font-semibold tracking-tight text-slate-900">
-            dot meet
+            <span className="sr-only">
+              待ち合わせの「今どこ？」を、URLひとつで。Dot Meet（ドットミート）
+            </span>
+            <span>dot meet</span>
           </h1>
           <p className="text-sm leading-relaxed text-slate-400">
             待ち合わせのときだけ、お互いの位置を共有。
             <br />
             合流したら自動で消えます。登録不要。
+          </p>
+          <p className="sr-only">
+            Dot Meet（ドットミート）は、待ち合わせ相手と現在地をリアルタイムで共有できる位置共有サービスです。専用アプリのインストールなしで、共有URLを送るだけですぐに使えます。
           </p>
         </div>
 
@@ -97,6 +127,20 @@ export default function HomePage() {
           画面を閉じたりロックしたりすると更新が止まります。
         </p>
       </div>
+
+      <section className="sr-only">
+        <h2>待ち合わせの位置共有を、もっと簡単に</h2>
+        <p>
+          駅やイベント会場、旅行先など、相手を見つけにくい場所での待ち合わせに。Dot
+          Meetなら、位置情報を共有するためのURLを発行し、相手に送るだけで現在地を確認できます。「今どこ？」「どの出口にいる？」というやり取りを減らし、スムーズに合流できます。
+        </p>
+        <p>
+          待ち合わせアプリのように事前登録やインストールをする必要はなく、URLで位置情報を共有するだけ。アプリなしで位置共有できるので、思い立ったその場ですぐに現在地共有・リアルタイム位置共有を始められます。
+        </p>
+        <p>
+          「DotMeet」と表記・検索されることもありますが、正式名称は Dot Meet(ドットミート)です。
+        </p>
+      </section>
     </main>
   );
 }
