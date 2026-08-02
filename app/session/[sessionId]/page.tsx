@@ -6,6 +6,7 @@ import { onValue } from "firebase/database";
 import type { User } from "firebase/auth";
 import Map, { type MapMarker } from "@/components/Map";
 import Logo from "@/components/Logo";
+import AdUnit from "@/components/AdUnit";
 import { ensureSignedIn } from "@/lib/firebase";
 import {
   completeSession,
@@ -482,7 +483,9 @@ export default function SessionPage({
         title="合流できました!"
         body="お疲れさまでした。位置情報はすべて削除されました。"
         showHomeLink
-      />
+      >
+        <AdUnit slot="8493607227" className="mb-8 w-full" />
+      </CenterMessage>
     );
   }
   if (screen === "full") {
