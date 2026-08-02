@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AdSenseScript from "@/components/AdSenseScript";
+import { ADSENSE_CLIENT_ID, ADSENSE_ENABLED } from "@/lib/adsense";
 
 const SITE_URL = "https://dot-meet.com";
 const TITLE = "Dot Meet（ドットミート）｜待ち合わせの位置共有をURLひとつで";
@@ -30,6 +32,9 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
   },
+  other: ADSENSE_ENABLED
+    ? { "google-adsense-account": ADSENSE_CLIENT_ID }
+    : undefined,
 };
 
 export const viewport: Viewport = {
@@ -46,6 +51,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className="h-full antialiased">
+      <head>
+        <AdSenseScript />
+      </head>
       <body className="h-full">{children}</body>
     </html>
   );

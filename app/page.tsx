@@ -126,6 +126,16 @@ export default function HomePage() {
           <br />
           画面を閉じたりロックしたりすると更新が止まります。
         </p>
+
+        <p className="mt-4 text-center text-[10px] text-slate-300">
+          <a href="/terms" className="hover:underline">
+            利用規約
+          </a>
+          <span className="mx-2">・</span>
+          <a href="/privacy" className="hover:underline">
+            プライバシーポリシー
+          </a>
+        </p>
       </div>
 
       <section className="sr-only">
