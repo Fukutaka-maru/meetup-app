@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ensureSignedIn } from "@/lib/firebase";
 import { createSession } from "@/lib/session";
 import Logo from "@/components/Logo";
+import AdUnit from "@/components/AdUnit";
 
 const STEPS = [
   "「待ち合わせを開始」を押す",
@@ -116,6 +117,10 @@ export default function HomePage() {
             </li>
           ))}
         </ol>
+
+        <div className="mt-8">
+          <AdUnit slot="1557643728" />
+        </div>
 
         <p className="mt-8 text-center text-[11px] leading-relaxed text-slate-300">
           位置情報は待ち合わせ相手にだけ共有され、

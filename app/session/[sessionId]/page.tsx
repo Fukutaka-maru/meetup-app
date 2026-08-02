@@ -1020,11 +1020,13 @@ function CenterMessage({
   title,
   body,
   showHomeLink,
+  children,
 }: {
   emoji: string;
   title: string;
   body?: string;
   showHomeLink?: boolean;
+  children?: React.ReactNode;
 }) {
   return (
     <main className="flex min-h-full flex-col items-center justify-center bg-white px-6 text-center">
@@ -1033,6 +1035,7 @@ function CenterMessage({
       {body && (
         <p className="mb-8 text-sm leading-relaxed text-slate-400">{body}</p>
       )}
+      {children}
       {showHomeLink && (
         <a
           href="/"
