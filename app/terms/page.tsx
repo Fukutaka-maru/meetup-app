@@ -61,6 +61,18 @@ export default function TermsPage() {
         <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
       </section>
 
+      <section className="mb-8">
+        <h2 className="mb-2 font-semibold text-slate-900">第8条（お問い合わせ）</h2>
+        <p>
+          本サービスに関するお問い合わせは、下記までご連絡ください。
+          <br />
+          Email:{" "}
+          <a href="mailto:info@routiee.com" className="underline">
+            info@routiee.com
+          </a>
+        </p>
+      </section>
+
       <p className="mt-12 text-xs text-slate-400">最終更新日: 2026年8月2日</p>
     </main>
   );

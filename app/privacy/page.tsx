@@ -68,7 +68,12 @@ export default function PrivacyPage() {
       <section className="mb-8">
         <h2 className="mb-2 font-semibold text-slate-900">5. お問い合わせ</h2>
         <p>
-          本ポリシーに関するお問い合わせは、運営者までご連絡ください。
+          本ポリシーに関するお問い合わせは、下記までご連絡ください。
+          <br />
+          Email:{" "}
+          <a href="mailto:info@routiee.com" className="underline">
+            info@routiee.com
+          </a>
         </p>
       </section>
 
