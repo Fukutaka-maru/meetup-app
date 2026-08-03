@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     await webpush.sendNotification(
       subscription,
       JSON.stringify({
-        title: "Dot Meet",
+        title: "dot meet",
         body: "位置情報の更新が止まっています。アプリを開いて更新してください。",
         url: `/session/${sessionId}`,
       })

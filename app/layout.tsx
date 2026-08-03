@@ -4,9 +4,9 @@ import AdSenseScript from "@/components/AdSenseScript";
 import { ADSENSE_CLIENT_ID, ADSENSE_ENABLED } from "@/lib/adsense";
 
 const SITE_URL = "https://dot-meet.com";
-const TITLE = "Dot Meet（ドットミート）｜待ち合わせの位置共有をURLひとつで";
+const TITLE = "dot meet（ドットミート）｜待ち合わせの位置共有をURLひとつで";
 const DESCRIPTION =
-  "Dot Meet（ドットミート）は、待ち合わせ相手と現在地をリアルタイム共有できるサービスです。専用アプリなしで、URLを送るだけですぐに位置情報を共有できます。";
+  "dot meet（ドットミート）は、待ち合わせ相手と現在地をリアルタイム共有できるサービスです。専用アプリなしで、URLを送るだけですぐに位置情報を共有できます。";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     follow: true,
   },
   openGraph: {
-    siteName: "Dot Meet",
+    siteName: "dot meet",
     title: TITLE,
     description: DESCRIPTION,
     url: SITE_URL,

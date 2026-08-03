@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Dot Meet",
-    short_name: "Dot Meet",
+    name: "dot meet",
+    short_name: "dot meet",
     description: "待ち合わせ相手と現在地をリアルタイム共有できるサービス",
     start_url: "/",
     display: "standalone",

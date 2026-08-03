@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "利用規約 | Dot Meet",
+  title: "利用規約 | dot meet",
   robots: { index: false, follow: true },
 };
 
@@ -13,7 +13,7 @@ export default function TermsPage() {
       <section className="mb-8">
         <h2 className="mb-2 font-semibold text-slate-900">第1条（適用）</h2>
         <p>
-          本規約は、Dot Meet（以下「本サービス」）の利用条件を定めるものです。ユーザーは本サービスを利用することで、本規約に同意したものとみなされます。
+          本規約は、dot meet（以下「本サービス」）の利用条件を定めるものです。ユーザーは本サービスを利用することで、本規約に同意したものとみなされます。
         </p>
       </section>
 
@@ -74,6 +74,16 @@ export default function TermsPage() {
       </section>
 
       <p className="mt-12 text-xs text-slate-400">最終更新日: 2026年8月2日</p>
+
+      <p className="mt-8 text-xs text-slate-400">
+        <a href="/privacy" className="underline">
+          プライバシーポリシー
+        </a>
+        <span className="mx-2">・</span>
+        <a href="/about" className="underline">
+          運営者情報
+        </a>
+      </p>
     </main>
   );
 }

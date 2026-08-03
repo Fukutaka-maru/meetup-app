@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "プライバシーポリシー | Dot Meet",
+  title: "プライバシーポリシー | dot meet",
   robots: { index: false, follow: true },
 };
 
@@ -15,7 +15,7 @@ export default function PrivacyPage() {
       <section className="mb-8">
         <h2 className="mb-2 font-semibold text-slate-900">1. 位置情報の取り扱い</h2>
         <p>
-          Dot Meet（以下「本サービス」）は、待ち合わせ機能の提供のためにユーザーの位置情報を取得します。取得した位置情報は、同一の待ち合わせセッションに参加している相手にのみ共有され、それ以外の第三者には提供されません。位置情報を含むセッションデータは、待ち合わせ完了時、または作成から1時間が経過した時点で自動的に削除されます。
+          dot meet（以下「本サービス」）は、待ち合わせ機能の提供のためにユーザーの位置情報を取得します。取得した位置情報は、同一の待ち合わせセッションに参加している相手にのみ共有され、それ以外の第三者には提供されません。位置情報を含むセッションデータは、待ち合わせ完了時、または作成から1時間が経過した時点で自動的に削除されます。
         </p>
       </section>
 
@@ -78,6 +78,16 @@ export default function PrivacyPage() {
       </section>
 
       <p className="mt-12 text-xs text-slate-400">最終更新日: 2026年8月2日</p>
+
+      <p className="mt-8 text-xs text-slate-400">
+        <a href="/terms" className="underline">
+          利用規約
+        </a>
+        <span className="mx-2">・</span>
+        <a href="/about" className="underline">
+          運営者情報
+        </a>
+      </p>
     </main>
   );
 }

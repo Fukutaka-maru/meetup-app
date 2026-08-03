@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const alt = "Dot Meet（ドットミート）｜待ち合わせの位置共有をURLひとつで";
+export const alt = "dot meet（ドットミート）｜待ち合わせの位置共有をURLひとつで";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
